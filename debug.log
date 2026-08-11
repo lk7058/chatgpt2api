@@ -1,0 +1,17 @@
+[24564:33828:0811/113912.740:ERROR:server_launcher.cpp(278)] ServerLauncher: exe not found, path: D:\SogouInput\16.6.0.4207\SogouCloud.exe
+[24564:33828:0811/113912.740:WARNING:server_launcher.cpp(194)] ServerLauncher: Failed to launch server
+[24564:33828:0811/113912.740:ERROR:kernel_shell_client.cpp(242)] KernelShellClient: EnsureServerRunning failed
+[24564:960:0811/113912.783:WARNING:kernel_service_proxy.cpp(690)] [KernelServiceProxy] NotifyLifecycleEvent called when not connected, event=1
+[24564:960:0811/113912.783:WARNING:kernel_service_proxy.cpp(690)] [KernelServiceProxy] NotifyLifecycleEvent called when not connected, event=1
+[24564:960:0811/113912.784:WARNING:kernel_parameter_setter.cc(150)] [KernelParameterSetter] NotifyDoublePinyinSchemeChanged failed, scheme=Sogou status=1
+[24564:960:0811/113912.784:WARNING:t_skinfilemap.cpp(63)] SGRenderLog:CheckUpdate newMem.OpenMem Suc, szNewMem:Local\sgime_skin.v5.filemap.sogouime
+[24564:960:0811/113912.784:WARNING:t_skinfilemap.cpp(65)] SGRenderLog:CheckUpdate finish: old version:1
+[24564:960:0811/113912.784:WARNING:t_skinfilemap.cpp(67)] SGRenderLog:CheckUpdate finish: new version:5
+[24564:33828:0811/113913.241:ERROR:server_launcher.cpp(278)] ServerLauncher: exe not found, path: D:\SogouInput\16.6.0.4207\SogouCloud.exe
+[24564:33828:0811/113913.241:WARNING:server_launcher.cpp(194)] ServerLauncher: Failed to launch server
+[24564:33828:0811/113913.241:ERROR:kernel_shell_client.cpp(242)] KernelShellClient: EnsureServerRunning failed
+[24564:960:0811/113913.469:WARNING:kernel_service_proxy.cpp(690)] [KernelServiceProxy] NotifyLifecycleEvent called when not connected, event=2
+[24564:960:0811/113913.590:WARNING:kernel_service_proxy.cpp(690)] [KernelServiceProxy] NotifyLifecycleEvent called when not connected, event=2
+[24564:33828:0811/113913.751:ERROR:server_launcher.cpp(278)] ServerLauncher: exe not found, path: D:\SogouInput\16.6.0.4207\SogouCloud.exe
+[24564:33828:0811/113913.751:WARNING:server_launcher.cpp(194)] ServerLauncher: Failed to launch server
+[24564:33828:0811/113913.751:ERROR:kernel_shell_client.cpp(242)] KernelShellClient: EnsureServerRunning failed
