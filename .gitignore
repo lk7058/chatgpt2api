@@ -33,3 +33,6 @@ git_cache/
 loginwithpassword_*/
 logwithemailverifycode_*/
 test_batch_output/
+# 本地调试/误生成日志
+debug.log
+*.log
