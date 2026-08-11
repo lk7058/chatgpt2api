@@ -1,4 +1,4 @@
-<h1 align="center">ChatGPT2API（定制版）</h1>
+<h1 align="center">ChatGPT2API</h1>
 
 <p align="center">基于 <a href="https://github.com/basketikun/chatgpt2api">basketikun/chatgpt2api</a> 二次开发的 ChatGPT 账号池代理服务，提供 OpenAI 兼容的图片生成/编辑 API，并内置邮箱账号体系、签到奖励、额度系统与 Web 管理面板。</p>
 
