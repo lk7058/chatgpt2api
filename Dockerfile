@@ -7,7 +7,7 @@ FROM --platform=$BUILDPLATFORM node:22-alpine AS web-build
 WORKDIR /app/web
 
 COPY web/package.json web/bun.lock ./
-RUN npm install
+RUN npm install --registry=https://registry.npmmirror.com
 
 COPY VERSION /app/VERSION
 COPY CHANGELOG.md /app/CHANGELOG.md
@@ -30,16 +30,18 @@ WORKDIR /app
 # - git: Git 存储后端需要
 # - libpq-dev: PostgreSQL 客户端库
 # - gcc: 编译 psycopg2-binary 需要
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    apt-get update && apt-get install -y --no-install-recommends \
     git \
     libpq-dev \
     gcc \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ uv
 
 COPY pyproject.toml uv.lock ./
+ENV UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple/
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY main.py ./
@@ -53,4 +55,4 @@ COPY --from=web-build /app/web/out ./web_dist
 
 EXPOSE 80
 
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80", "--access-log"]
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80", "--no-access-log"]

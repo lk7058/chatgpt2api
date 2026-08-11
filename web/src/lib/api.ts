@@ -14,6 +14,7 @@ export type ImageStorageSettings = {
   webdav_password: string;
   webdav_root_path: string;
   public_base_url: string;
+  has_webdav_password?: boolean;
 };
 
 export type Account = {
@@ -167,6 +168,8 @@ export type SettingsConfig = {
   };
   refresh_account_interval_minute?: number | string;
   image_retention_days?: number | string;
+  image_local_download_enabled?: boolean;
+  image_local_retention_days?: number | string;
   image_poll_timeout_secs?: number | string;
   image_account_concurrency?: number | string;
   image_parallel_generation?: boolean;
@@ -183,6 +186,34 @@ export type SettingsConfig = {
   image_storage?: ImageStorageSettings;
   proxy_runtime?: ProxyRuntimeSettings;
   third_party_apps?: ThirdPartyAppsSettings;
+  registration_enabled?: boolean;
+  registration_bonus_quota?: number;
+  checkin_bonus_quota?: number;
+  checkin_streak_bonuses?: { days: number; bonus: number }[];
+  site_title?: string;
+  smtp?: {
+    enabled?: boolean;
+    host?: string;
+    port?: number | string;
+    username?: string;
+    password?: string;
+    from?: string;
+    from_name?: string;
+    use_ssl?: boolean;
+    has_password?: boolean;
+  };
+  turnstile?: {
+    enabled?: boolean;
+    site_key?: string;
+    secret_key?: string;
+    has_secret_key?: boolean;
+  };
+  model_quota_weights?: Record<string, number>;
+  third_party_apis?: ThirdPartyApi[];
+  admin_account?: {
+    username?: string;
+    has_password?: boolean;
+  };
   backup?: BackupSettings;
   backup_state?: BackupState;
   [key: string]: unknown;
@@ -212,6 +243,8 @@ export type BackupSettings = {
   encrypt: boolean;
   passphrase: string;
   include: BackupInclude;
+  has_secret_access_key?: boolean;
+  has_passphrase?: boolean;
 };
 
 export type BackupState = {
@@ -309,6 +342,390 @@ export type LoginResponse = {
   subject_id: string;
   name: string;
 };
+
+export type AuthUser = {
+  id: string;
+  username: string;
+  role: AuthRole;
+  quota_total: number;
+  quota_used: number;
+  quota_left: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  email: string;
+  email_verified: boolean;
+  last_checkin_date: string;
+  checkin_streak: number;
+  total_checkins: number;
+};
+
+export type StreakBonus = {
+  days: number;
+  bonus: number;
+};
+
+export type CheckinStatus = {
+  ok: boolean;
+  checked_today: boolean;
+  checkin_streak: number;
+  total_checkins: number;
+  last_checkin_date: string;
+  bonus_quota: number;
+  streak_bonuses: StreakBonus[];
+  next_streak_bonus?: StreakBonus | null;
+  today: string;
+};
+
+export type CheckinResult = {
+  ok: boolean;
+  bonus_quota: number;
+  streak_bonus?: number;
+  quota_left: number;
+  checkin_streak: number;
+  total_checkins: number;
+  checked_today: boolean;
+};
+
+export type LoginResult = {
+  ok: boolean;
+  token: string;
+  role: AuthRole;
+  subject_id: string;
+  name: string;
+  user: AuthUser;
+};
+
+export type MeResult = {
+  ok: boolean;
+  role: AuthRole;
+  subject_id: string;
+  name: string;
+  user: AuthUser | null;
+  quota_left: number;
+  quota_total: number;
+  quota_used: number;
+};
+
+export type ThirdPartyApi = {
+  id: string;
+  name: string;
+  base_url: string;
+  has_api_key: boolean;
+  models: string[];
+  enabled: boolean;
+  default: boolean;
+  created_at: string;
+};
+
+export type GenerationRecord = {
+  id: string;
+  kind: string;
+  title: string;
+  payload: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function loginWithPassword(email: string, password: string) {
+  return httpRequest<LoginResult>("/auth/login", {
+    method: "POST",
+    body: { username: email, password },
+    redirectOnUnauthorized: false,
+  });
+}
+
+export async function registerWithPassword(username: string, password: string) {
+  return httpRequest<LoginResult>("/auth/register", {
+    method: "POST",
+    body: { username, password },
+    redirectOnUnauthorized: false,
+  });
+}
+
+export async function logoutSession() {
+  return httpRequest<{ ok: boolean }>("/auth/logout", { method: "POST", body: {} });
+}
+
+export async function fetchMe() {
+  return httpRequest<MeResult>("/api/me");
+}
+
+export async function fetchCheckinStatus() {
+  return httpRequest<CheckinStatus>("/api/checkin/status");
+}
+
+export async function doCheckin() {
+  return httpRequest<CheckinResult>("/api/checkin", { method: "POST", body: {} });
+}
+
+export type QuotaRecord = {
+  id: string;
+  type: "income" | "expense";
+  amount: number;
+  balance_after: number;
+  source: string;
+  note: string;
+  created_at: string;
+};
+
+export type QuotaRecordsResponse = {
+  items: QuotaRecord[];
+  summary: {
+    total_income: number;
+    total_expense: number;
+    count: number;
+  };
+};
+
+export async function fetchQuotaRecords(limit = 100) {
+  return httpRequest<QuotaRecordsResponse>(`/api/quota/records?limit=${limit}`);
+}
+
+export async function fetchCheckinCalendar(days = 60) {
+  return httpRequest<{ dates: string[] }>(`/api/checkin/calendar?days=${days}`);
+}
+
+export async function changeMyPassword(oldPassword: string, newPassword: string) {
+  return httpRequest<{ ok: boolean; item: AuthUser }>("/api/me/password", {
+    method: "POST",
+    body: { old_password: oldPassword, new_password: newPassword },
+  });
+}
+
+export async function sendRegisterEmailCode(email: string, captchaId = "", captchaCode = "") {
+  return httpRequest<{ ok: boolean; message: string }>("/auth/register", {
+    method: "POST",
+    body: { password: "pending123", email, captcha_id: captchaId, captcha_code: captchaCode },
+    redirectOnUnauthorized: false,
+  });
+}
+
+export type PublicSettings = {
+  site_title: string;
+  turnstile_site_key: string;
+  turnstile_enabled: boolean;
+};
+
+export async function fetchPublicSettings() {
+  return httpRequest<PublicSettings>("/api/public-settings");
+}
+
+export async function deleteRedeemCode(codeId: string) {
+  return httpRequest<{ ok: boolean }>(`/api/redeem-codes/${encodeURIComponent(codeId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function registerWithEmail(email: string, password: string, code: string) {
+  return httpRequest<LoginResult>("/auth/register/verify", {
+    method: "POST",
+    body: { username: email, password, email, code },
+    redirectOnUnauthorized: false,
+  });
+}
+
+export async function sendForgotPasswordCode(email: string, captchaId = "", captchaCode = "") {
+  return httpRequest<{ ok: boolean; message: string }>("/auth/forgot-password", {
+    method: "POST",
+    body: { email, captcha_id: captchaId, captcha_code: captchaCode },
+    redirectOnUnauthorized: false,
+  });
+}
+
+export async function resetPasswordWithEmail(email: string, code: string, newPassword: string) {
+  return httpRequest<{ ok: boolean; message: string }>("/auth/forgot-password/verify", {
+    method: "POST",
+    body: { email, code, new_password: newPassword },
+    redirectOnUnauthorized: false,
+  });
+}
+
+export async function sendBindEmailCode(email: string) {
+  return httpRequest<{ ok: boolean; message: string }>("/api/me/email/send-code", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export async function bindEmail(email: string, code: string) {
+  return httpRequest<{ ok: boolean; item: AuthUser }>("/api/me/email/bind", {
+    method: "POST",
+    body: { email, code },
+  });
+}
+
+export type RedeemCode = {
+  id: string;
+  code: string;
+  amount: number;
+  status: "unused" | "used";
+  created_by: string;
+  created_at: string;
+  used_by: string;
+  used_username: string;
+  used_at: string;
+};
+
+export async function generateRedeemCodes(count: number, amount: number) {
+  return httpRequest<{ items: RedeemCode[]; count: number }>("/api/redeem-codes/generate", {
+    method: "POST",
+    body: { count, amount },
+  });
+}
+
+export async function fetchRedeemCodes(status = "") {
+  return httpRequest<{ items: RedeemCode[] }>(`/api/redeem-codes?status=${status}`);
+}
+
+export async function redeemCode(code: string) {
+  return httpRequest<{ ok: boolean; amount: number; code: string; quota_left?: number }>("/api/redeem", {
+    method: "POST",
+    body: { code },
+  });
+}
+
+export async function fetchMyRedeems() {
+  return httpRequest<{ items: RedeemCode[] }>("/api/redeem/mine");
+}
+
+export async function testSmtp(email: string) {
+  return httpRequest<{ ok: boolean; message: string }>("/api/smtp/test", {
+    method: "POST",
+    body: { email },
+  });
+}
+
+export async function addUserQuota(userId: string, amount: number) {
+  return httpRequest<{ item: AuthUser }>(`/api/users/${encodeURIComponent(userId)}/quota/add`, {
+    method: "POST",
+    body: { amount },
+  });
+}
+
+export async function subtractUserQuota(userId: string, amount: number) {
+  return httpRequest<{ item: AuthUser }>(`/api/users/${encodeURIComponent(userId)}/quota/subtract`, {
+    method: "POST",
+    body: { amount },
+  });
+}
+
+export async function resetUserQuota(userId: string) {
+  return httpRequest<{ item: AuthUser }>(`/api/users/${encodeURIComponent(userId)}/quota/reset`, {
+    method: "POST",
+    body: {},
+  });
+}
+
+export async function fetchUsers() {
+  return httpRequest<{ items: AuthUser[] }>("/api/users");
+}
+
+export async function createUser(email: string, password: string) {
+  return httpRequest<{ item: AuthUser; items: AuthUser[] }>("/api/users", {
+    method: "POST",
+    body: { username: email, password, email },
+  });
+}
+
+export async function setUserQuota(userId: string, quotaTotal: number) {
+  return httpRequest<{ item: AuthUser }>(`/api/users/${encodeURIComponent(userId)}/quota`, {
+    method: "POST",
+    body: { quota_total: quotaTotal },
+  });
+}
+
+export async function resetUserPassword(userId: string, password: string) {
+  return httpRequest<{ item: AuthUser }>(`/api/users/${encodeURIComponent(userId)}/password`, {
+    method: "POST",
+    body: { password },
+  });
+}
+
+export async function setUserEnabled(userId: string, enabled: boolean) {
+  return httpRequest<{ item: AuthUser }>(`/api/users/${encodeURIComponent(userId)}/enabled`, {
+    method: "POST",
+    body: { enabled },
+  });
+}
+
+export async function deleteUser(userId: string) {
+  return httpRequest<{ ok: boolean; items: AuthUser[] }>(`/api/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchThirdPartyApis() {
+  return httpRequest<{ items: ThirdPartyApi[] }>("/api/third-party-apis");
+}
+
+export async function upsertThirdPartyApi(body: {
+  id?: string;
+  name: string;
+  base_url: string;
+  api_key?: string;
+  models?: string[];
+  enabled?: boolean;
+  default?: boolean;
+}) {
+  return httpRequest<{ item: ThirdPartyApi; items: ThirdPartyApi[] }>("/api/third-party-apis", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function testThirdPartyApi(body: { name: string; base_url: string; api_key?: string }) {
+  return httpRequest<{ result: { ok: boolean; status?: number; error?: string } }>("/api/third-party-apis/test", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function fetchThirdPartyModels(body: { name: string; base_url: string; api_key?: string }) {
+  return httpRequest<{ result: { ok: boolean; models?: string[]; status?: number; error?: string } }>(
+    "/api/third-party-apis/models",
+    {
+      method: "POST",
+      body,
+    },
+  );
+}
+
+export async function deleteThirdPartyApi(apiId: string) {
+  return httpRequest<{ ok: boolean; items: ThirdPartyApi[] }>(`/api/third-party-apis/${encodeURIComponent(apiId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchGenerationRecords(limit = 200) {
+  return httpRequest<{ items: GenerationRecord[] }>(`/api/records?limit=${limit}`);
+}
+
+export async function upsertGenerationRecord(record: {
+  id?: string;
+  kind?: string;
+  title?: string;
+  payload?: unknown;
+  created_at?: string;
+  updated_at?: string;
+}) {
+  return httpRequest<{ item: GenerationRecord }>("/api/records", {
+    method: "POST",
+    body: record,
+  });
+}
+
+export async function deleteGenerationRecord(recordId: string) {
+  return httpRequest<{ ok: boolean }>(`/api/records/${encodeURIComponent(recordId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function clearGenerationRecords() {
+  return httpRequest<{ ok: boolean; removed: number }>("/api/records", {
+    method: "DELETE",
+  });
+}
 
 export type UserKey = {
   id: string;

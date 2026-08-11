@@ -1,7 +1,7 @@
 "use client";
 
 import { Cloud, LoaderCircle, PlugZap, RefreshCw, Save } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,16 @@ import { useSettingsStore } from "../store";
 export function ConfigCard() {
   const [isTestingProxy, setIsTestingProxy] = useState(false);
   const [proxyTestResult, setProxyTestResult] = useState<ProxyTestResult | null>(null);
+  const [quotaWeightsText, setQuotaWeightsText] = useState("");
+  const [streakBonusesText, setStreakBonusesText] = useState("");
   const logLevelOptions = ["debug", "info", "warning", "error"];
   const config = useSettingsStore((state) => state.config);
   const isLoadingConfig = useSettingsStore((state) => state.isLoadingConfig);
   const isSavingConfig = useSettingsStore((state) => state.isSavingConfig);
   const setRefreshAccountIntervalMinute = useSettingsStore((state) => state.setRefreshAccountIntervalMinute);
   const setImageRetentionDays = useSettingsStore((state) => state.setImageRetentionDays);
+  const setImageLocalDownloadEnabled = useSettingsStore((state) => state.setImageLocalDownloadEnabled);
+  const setImageLocalRetentionDays = useSettingsStore((state) => state.setImageLocalRetentionDays);
   const setImagePollTimeoutSecs = useSettingsStore((state) => state.setImagePollTimeoutSecs);
   const setImageAccountConcurrency = useSettingsStore((state) => state.setImageAccountConcurrency);
   const setImageSettleEnabled = useSettingsStore((state) => state.setImageSettleEnabled);
@@ -43,11 +47,42 @@ export function ConfigCard() {
   const setSensitiveWordsText = useSettingsStore((state) => state.setSensitiveWordsText);
   const setAIReviewField = useSettingsStore((state) => state.setAIReviewField);
   const setImageStorageField = useSettingsStore((state) => state.setImageStorageField);
+  const setRegistrationEnabled = useSettingsStore((state) => state.setRegistrationEnabled);
+  const setRegistrationBonusQuota = useSettingsStore((state) => state.setRegistrationBonusQuota);
+  const setCheckinBonusQuota = useSettingsStore((state) => state.setCheckinBonusQuota);
+  const setCheckinStreakBonuses = useSettingsStore((state) => state.setCheckinStreakBonuses);
+  const setSiteTitle = useSettingsStore((state) => state.setSiteTitle);
+  const setModelQuotaWeights = useSettingsStore((state) => state.setModelQuotaWeights);
   const testImageStorage = useSettingsStore((state) => state.testImageStorage);
   const syncImagesToWebDAV = useSettingsStore((state) => state.syncImagesToWebDAV);
   const isTestingImageStorage = useSettingsStore((state) => state.isTestingImageStorage);
   const isSyncingImageStorage = useSettingsStore((state) => state.isSyncingImageStorage);
   const saveConfig = useSettingsStore((state) => state.saveConfig);
+
+  // 模型权重文本初始化/同步
+  const initializedWeightsRef = useRef(false);
+  useEffect(() => {
+    if (initializedWeightsRef.current || !config?.model_quota_weights) {
+      return;
+    }
+    const weights = config.model_quota_weights as Record<string, number>;
+    const lines = Object.entries(weights)
+      .map(([key, value]) => `${key}=${value}`)
+      .join("\n");
+    initializedWeightsRef.current = true;
+    setQuotaWeightsText(lines);
+  }, [config?.model_quota_weights]);
+
+  // 连续签到奖励文本初始化/同步
+  const initializedStreakRef = useRef(false);
+  useEffect(() => {
+    if (initializedStreakRef.current || !config?.checkin_streak_bonuses) {
+      return;
+    }
+    const lines = config.checkin_streak_bonuses.map((item) => `${item.days}=${item.bonus}`).join("\n");
+    initializedStreakRef.current = true;
+    setStreakBonusesText(lines);
+  }, [config?.checkin_streak_bonuses]);
 
   const handleTestProxy = async () => {
     const candidate = String(config?.proxy || "").trim();
@@ -186,6 +221,25 @@ export function ConfigCard() {
               className="h-10 rounded-xl border-stone-200 bg-white"
             />
             <p className="text-xs text-stone-500">自动删除多少天前的本地图片。</p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm text-stone-700">第三方图片下载到本地</label>
+            <Checkbox
+              checked={Boolean(config?.image_local_download_enabled)}
+              onCheckedChange={(checked) => setImageLocalDownloadEnabled(Boolean(checked))}
+            />
+            <p className="text-xs leading-5 text-stone-500">
+              开启后，第三方 API 生成的图片会先下载到本服务器再展示给用户，避免暴露第三方源站地址；关闭则直接透传第三方图片链接。
+            </p>
+            <Input
+              type="number"
+              value={String(config?.image_local_retention_days ?? 7)}
+              onChange={(event) => setImageLocalRetentionDays(event.target.value)}
+              placeholder="7"
+              className="h-10 rounded-xl border-stone-200 bg-white"
+              disabled={!config?.image_local_download_enabled}
+            />
+            <p className="text-xs text-stone-500">下载到本地的第三方图片保留天数，到期自动删除。</p>
           </div>
           <div className="space-y-2">
             <label className="text-sm text-stone-700">图片轮询超时</label>
@@ -416,6 +470,7 @@ export function ConfigCard() {
                   type="password"
                   value={String(config?.image_storage?.webdav_password || "")}
                   onChange={(event) => setImageStorageField("webdav_password", event.target.value)}
+                  placeholder={config?.image_storage?.has_webdav_password ? "已配置，留空保持不变" : "WebDAV 密码"}
                   className="h-10 rounded-xl border-stone-200 bg-white"
                   disabled={!config?.image_storage?.enabled}
                 />
@@ -446,14 +501,87 @@ export function ConfigCard() {
           <div className="space-y-4 rounded-xl border border-stone-200 bg-white px-4 py-3 md:col-span-2">
             <label className="flex items-center gap-3 text-sm text-stone-700">
               <Checkbox
+                checked={Boolean(config?.registration_enabled)}
+                onCheckedChange={(checked) => setRegistrationEnabled(Boolean(checked))}
+              />
+              开放注册
+            </label>
+            <p className="text-xs leading-6 text-stone-500">
+              开启后登录页显示「去注册」入口，任何人可注册普通账号（默认额度 0，由管理员在「用户管理」中分配）。关闭后仅管理员可创建账号。
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm text-stone-700">网站标题</label>
+            <Input
+              value={String(config?.site_title || "")}
+              onChange={(event) => setSiteTitle(event.target.value)}
+              placeholder="ChatGPT 号池管理"
+              className="h-10 rounded-xl border-stone-200 bg-white"
+            />
+            <p className="text-xs text-stone-500">显示在浏览器标签页的网站标题。</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm text-stone-700">注册赠送额度</label>
+              <Input
+                type="number"
+                value={String(config?.registration_bonus_quota ?? 0)}
+                onChange={(event) => setRegistrationBonusQuota(event.target.value)}
+                placeholder="0"
+                className="h-10 rounded-xl border-stone-200 bg-white"
+              />
+              <p className="text-xs text-stone-500">新用户注册时自动赠送的额度次数，0 表示不赠送。</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-stone-700">每日签到赠送额度</label>
+              <Input
+                type="number"
+                value={String(config?.checkin_bonus_quota ?? 0)}
+                onChange={(event) => setCheckinBonusQuota(event.target.value)}
+                placeholder="0"
+                className="h-10 rounded-xl border-stone-200 bg-white"
+              />
+              <p className="text-xs text-stone-500">用户每天首次签到赠送的额度次数，0 表示关闭签到赠送。</p>
+            </div>
+          </div>
+          <div className="space-y-3 rounded-xl border border-stone-200 bg-white px-4 py-3 md:col-span-2">
+            <div className="space-y-2">
+              <label className="text-sm text-stone-700">连续签到奖励（每行一个档位，格式 连续天数=奖励额度）</label>
+              <Textarea
+                value={streakBonusesText}
+                onChange={(event) => setStreakBonusesText(event.target.value)}
+                placeholder={"3=5\n7=20\n30=100"}
+                rows={4}
+                className="rounded-xl border-stone-200 bg-white font-mono text-xs shadow-none"
+              />
+              <p className="text-xs leading-5 text-stone-500">
+                连续签到恰好满对应天数时，额外奖励一次额度（每轮连续签到各档位可各领一次）。例如 "7=20" 表示连续签到满 7 天额外奖励 20 额度。留空表示不启用连续签到奖励。
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3 rounded-xl border border-stone-200 bg-white px-4 py-3 md:col-span-2">
+            <div className="space-y-2">
+              <label className="text-sm text-stone-700">模型额度权重（每行一个，格式 模型名=权重）</label>
+              <Textarea
+                value={quotaWeightsText}
+                onChange={(event) => setQuotaWeightsText(event.target.value)}
+                placeholder={"default=1\ngpt-5=2\ngpt-image-2=2"}
+                rows={5}
+                className="rounded-xl border-stone-200 bg-white font-mono text-xs shadow-none"
+              />
+              <p className="text-xs leading-5 text-stone-500">
+                普通用户每次请求按模型权重扣减额度（如 gpt-5 权重 2 表示消耗 2 次）。支持前缀匹配，未匹配使用 default。图片按张数 × 权重扣减。
+              </p>
+            </div>
+          </div>
+          <div className="space-y-4 rounded-xl border border-stone-200 bg-white px-4 py-3 md:col-span-2">
+            <label className="flex items-center gap-3 text-sm text-stone-700">
+              <Checkbox
                 checked={Boolean(config?.ai_review?.enabled)}
                 onCheckedChange={(checked) => setAIReviewField("enabled", Boolean(checked))}
               />
               启用 AI 审核
             </label>
-            <p className="text-xs leading-6 text-stone-500">
-              开启后会在请求进入生图账号前先调用审核模型，审核不通过会直接拒绝，减少违规提示词触达账号造成风控或封号的风险。
-            </p>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <label className="text-sm text-stone-700">Base URL</label>
@@ -478,7 +606,39 @@ export function ConfigCard() {
         <div className="flex justify-end">
           <Button
             className="h-10 rounded-xl bg-stone-950 px-5 text-white hover:bg-stone-800"
-            onClick={() => void saveConfig()}
+            onClick={() => {
+              const weights: Record<string, number> = {};
+              for (const line of quotaWeightsText.split("\n")) {
+                const trimmed = line.trim();
+                if (!trimmed) {
+                  continue;
+                }
+                const [key, value] = trimmed.split("=").map((item) => item.trim());
+                if (!key) {
+                  continue;
+                }
+                const parsed = Number(value);
+                weights[key] = Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : 1;
+              }
+              const streakBonuses: { days: number; bonus: number }[] = [];
+              const seenDays = new Set<number>();
+              for (const line of streakBonusesText.split("\n")) {
+                const match = line.trim().match(/^(\d+)\s*=\s*(\d+)$/);
+                if (!match) {
+                  continue;
+                }
+                const days = Number(match[1]);
+                const bonus = Number(match[2]);
+                if (days >= 1 && bonus >= 1 && !seenDays.has(days)) {
+                  seenDays.add(days);
+                  streakBonuses.push({ days, bonus });
+                }
+              }
+              streakBonuses.sort((a, b) => a.days - b.days);
+              setModelQuotaWeights(weights);
+              setCheckinStreakBonuses(streakBonuses);
+              void saveConfig();
+            }}
             disabled={isSavingConfig}
           >
             {isSavingConfig ? <LoaderCircle className="size-4 animate-spin" /> : <Save className="size-4" />}

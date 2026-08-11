@@ -721,7 +721,11 @@ def stream_text_deltas(backend: OpenAIBackendAPI, request: ConversationRequest) 
             attempted_tokens.add(token)
         active_backend = None
         try:
-            active_backend = OpenAIBackendAPI(access_token=token)
+            # 首轮复用传入 backend（连接复用）；换 token 后才新建
+            if token and token == getattr(backend, "access_token", ""):
+                active_backend = backend
+            else:
+                active_backend = OpenAIBackendAPI(access_token=token)
             for event in conversation_events(
                 active_backend,
                 messages=request.messages,
@@ -753,7 +757,7 @@ def stream_text_deltas(backend: OpenAIBackendAPI, request: ConversationRequest) 
                     continue
             raise
         finally:
-            if active_backend is not None:
+            if active_backend is not None and active_backend is not backend:
                 active_backend.close()
 
 

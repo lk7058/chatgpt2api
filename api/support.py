@@ -21,15 +21,32 @@ def extract_bearer_token(authorization: str | None) -> str:
 
 
 def _legacy_admin_identity(token: str) -> dict[str, object] | None:
+    import hmac
+
     auth_key = str(config.auth_key or "").strip()
-    if auth_key and token == auth_key:
-        return {"id": "admin", "name": "管理员", "role": "admin"}
+    if auth_key and hmac.compare_digest(token, auth_key):
+        return {"id": "admin", "name": "管理员", "role": "admin", "user_id": None}
     return None
+
+
+def _session_identity(token: str) -> dict[str, object] | None:
+    from services.user_service import user_service
+
+    user = user_service.resolve_session(token)
+    if user is None:
+        return None
+    return {
+        "id": user.get("id"),
+        "name": user.get("username"),
+        "role": user.get("role"),
+        "user_id": user.get("id"),
+        "session": True,
+    }
 
 
 def require_identity(authorization: str | None) -> dict[str, object]:
     token = extract_bearer_token(authorization)
-    identity = _legacy_admin_identity(token) or auth_service.authenticate(token)
+    identity = _legacy_admin_identity(token) or auth_service.authenticate(token) or _session_identity(token)
     if identity is None:
         raise HTTPException(status_code=401, detail={"error": "密钥无效或已失效，请重新登录"})
     return identity

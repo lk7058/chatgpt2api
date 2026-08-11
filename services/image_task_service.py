@@ -257,10 +257,40 @@ class ImageTaskService:
         # 将进度回调添加到 payload 中（handler 会提取并传递给 ConversationRequest）
         payload_with_progress = {**payload, "progress_callback": progress_callback}
         try:
-            handler = self.edit_handler if mode == "edit" else self.generation_handler
-            result = handler(payload_with_progress)
+            # 第三方 API 路由：模型匹配则转发到自定义 OpenAI 兼容图片端点
+            from services.third_party_api import (
+                image_edit as third_party_image_edit,
+                image_generation as third_party_image_generation,
+                route_for_model as third_party_route_for_model,
+            )
+
+            third_party = third_party_route_for_model(model)
+            if third_party is not None:
+                try:
+                    if mode == "edit":
+                        result = third_party_image_edit(third_party, payload_with_progress)
+                    else:
+                        result = third_party_image_generation(third_party, payload_with_progress)
+                except Exception as exc:
+                    error = RuntimeError("生成失败，请稍后再试。")
+                    # 原始错误附加到异常对象，供日志记录排查
+                    setattr(error, "original_error", f"第三方 API 图片生成失败：{exc}")
+                    raise error from exc
+            else:
+                handler = self.edit_handler if mode == "edit" else self.generation_handler
+                result = handler(payload_with_progress)
             if not isinstance(result, dict):
                 raise RuntimeError("image task returned streaming result unexpectedly")
+            # 第三方图片镜像到本地：下载后替换 url 为本地地址（避免暴露源站）
+            if third_party is not None:
+                try:
+                    from services.third_party_image_download import mirror_result_images
+
+                    mirror_base_url = str(payload_with_progress.get("base_url") or "").rstrip("/")
+                    mirror_api_key = str(third_party.get("api_key") or "")
+                    result = mirror_result_images(result, mirror_base_url, mirror_api_key)
+                except Exception as exc:
+                    print(f"[image-task] mirror images failed: {exc}")
             data = result.get("data")
             account_email = _clean(result.get("_account_email") or result.get("account_email"))
             if not isinstance(data, list) or not data:
@@ -276,6 +306,17 @@ class ImageTaskService:
             usage = result.get("usage")
             duration_ms = int((time.time() - started) * 1000)
             self._update_task(key, status=TASK_STATUS_SUCCESS, data=data, usage=usage, error="", duration_ms=duration_ms)
+            # 任务成功：扣减用户额度（管理员/无绑定用户跳过）
+            try:
+                user_id = identity.get("user_id")
+                if user_id and identity.get("role") != "admin":
+                    from services.config import config
+                    from services.user_service import user_service
+
+                    weight = config.get_model_quota_weight(model) * max(1, len(data))
+                    user_service.deduct_quota(str(user_id), weight, source="image", note=model)
+            except Exception:
+                pass
             self._log_call(
                 identity,
                 mode,
@@ -291,7 +332,10 @@ class ImageTaskService:
             account_email = _clean(getattr(exc, "account_email", ""))
             conversation_id = _clean(getattr(exc, "conversation_id", ""))
             duration_ms = int((time.time() - started) * 1000)
-            self._update_task(key, status=TASK_STATUS_ERROR, error=error_message, data=[],
+            # 任务对外 error 使用通用消息；日志记录原始错误（如有）
+            task_error = error_message
+            log_error = _clean(getattr(exc, "original_error", "")) or error_message
+            self._update_task(key, status=TASK_STATUS_ERROR, error=task_error, data=[],
                               duration_ms=duration_ms,
                               **({"conversation_id": conversation_id} if conversation_id else {}))
             self._log_call(
@@ -302,7 +346,7 @@ class ImageTaskService:
                 "调用失败",
                 request_preview=request_text(payload.get("prompt")),
                 status="failed",
-                error=error_message,
+                error=log_error,
                 account_email=account_email,
             )
 

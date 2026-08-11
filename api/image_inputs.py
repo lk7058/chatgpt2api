@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import base64
 import binascii
+import ipaddress
 import json
 import mimetypes
 import re
+import socket
 from pathlib import PurePosixPath
 from typing import Any, TypeGuard
-from urllib.parse import unquote, unquote_to_bytes, urlparse
+from urllib.parse import unquote, unquote_to_bytes, urljoin, urlparse
 
 from curl_cffi import requests
 from fastapi import HTTPException, Request
@@ -255,25 +257,63 @@ def _filename_from_url(parsed_path: str, mime_type: str) -> str:
     return _safe_filename(raw_name, mime_type, "image_url")
 
 
+def _validate_url_target(url: str) -> None:
+    """SSRF 防护：解析 URL 主机 IP，拒绝内网/保留/链路本地地址。"""
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    if not host:
+        raise HTTPException(status_code=400, detail={"error": "image_url must have a valid host"})
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        raise HTTPException(status_code=400, detail={"error": "image_url host could not be resolved"})
+    for info in infos:
+        try:
+            addr = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
+        ):
+            raise HTTPException(status_code=400, detail={"error": "image_url target is not allowed"})
+
+
 def _download_image_url(url: str) -> ImageInput:
-    """下载远程图片：把 http/https 图片链接转成标准图片输入元组。"""
+    """下载远程图片：把 http/https 图片链接转成标准图片输入元组（含 SSRF 防护）。"""
     source = _clean(url)
     if source.startswith("data:"):
         return _decode_data_url(source)
     parsed = urlparse(source)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise HTTPException(status_code=400, detail={"error": "image_url must be an http or https URL"})
-    try:
-        response = requests.get(
-            source,
-            headers={"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt2api image fetcher"},
-            timeout=60,
-            allow_redirects=True,
-            **proxy_settings.build_session_kwargs(),
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail={"error": f"image_url fetch failed: {exc}"}) from exc
-    if not 200 <= response.status_code < 300:
+    response = None
+    current = source
+    # 跟随重定向时每跳都校验目标，最多 5 跳
+    for _ in range(5):
+        _validate_url_target(current)
+        try:
+            response = requests.get(
+                current,
+                headers={"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt2api image fetcher"},
+                timeout=60,
+                allow_redirects=False,
+                **proxy_settings.build_session_kwargs(),
+            )
+        except Exception:
+            raise HTTPException(status_code=400, detail={"error": "image_url fetch failed"}) from None
+        if response.status_code in {301, 302, 303, 307, 308}:
+            location = response.headers.get("Location")
+            if not location:
+                raise HTTPException(status_code=400, detail={"error": "image_url redirect missing location"})
+            current = urljoin(current, location)
+            continue
+        break
+    if response is None or not 200 <= response.status_code < 300:
         raise HTTPException(status_code=400, detail={"error": f"image_url fetch failed: HTTP {response.status_code}"})
     content_length = _clean(response.headers.get("content-length"))
     if content_length and content_length.isdigit() and int(content_length) > MAX_IMAGE_REFERENCE_BYTES:

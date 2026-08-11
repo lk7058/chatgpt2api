@@ -2,21 +2,24 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Menu } from "lucide-react";
+import { CalendarCheck, Menu } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { HeaderActions } from "@/components/header-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import webConfig from "@/constants/common-env";
-import { fetchThirdPartyApps, type ThirdPartyAppsSettings } from "@/lib/api";
+import { doCheckin, fetchCheckinStatus, fetchPublicSettings, fetchThirdPartyApps, logoutSession, type ThirdPartyAppsSettings } from "@/lib/api";
 import { getValidatedAuthSession } from "@/lib/auth-session";
 import { cn } from "@/lib/utils";
 import { clearStoredAuthSession, type StoredAuthSession } from "@/store/auth";
 
 const adminNavItems = [
   { href: "/image", label: "生图" },
+  { href: "/center", label: "用户中心" },
+  { href: "/center/redeem", label: "额度中心" },
   { href: "/accounts", label: "号池管理" },
   { href: "/image-manager", label: "图片管理" },
   { href: "/logs", label: "日志管理" },
@@ -24,7 +27,11 @@ const adminNavItems = [
   { href: "/settings", label: "设置" },
 ];
 
-const userNavItems = [{ href: "/image", label: "画图" }];
+const userNavItems = [
+  { href: "/image", label: "画图" },
+  { href: "/center", label: "用户中心" },
+  { href: "/center/redeem", label: "额度中心" },
+];
 
 function buildThirdPartyHref(appUrl: string, baseUrl: string, apiKey: string) {
   const url = appUrl.trim();
@@ -99,8 +106,78 @@ export function TopNav() {
   }, [session]);
 
   const handleLogout = async () => {
+    try {
+      await logoutSession();
+    } catch {
+      // 忽略退出接口错误
+    }
     await clearStoredAuthSession();
     router.replace("/login");
+  };
+
+  useEffect(() => {
+    // 动态设置网站标题（管理员可配置）
+    fetchPublicSettings()
+      .then((data) => {
+        if (data.site_title) {
+          document.title = data.site_title;
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const [checkinStatus, setCheckinStatus] = useState<{ checkedToday: boolean; bonus: number; streak: number } | null>(null);
+  const [isCheckinPending, setIsCheckinPending] = useState(false);
+
+  useEffect(() => {
+    if (!session || pathname === "/login") {
+      setCheckinStatus(null);
+      return;
+    }
+    let active = true;
+    const load = async () => {
+      try {
+        const data = await fetchCheckinStatus();
+        if (active) {
+          setCheckinStatus({
+            checkedToday: data.checked_today,
+            bonus: data.bonus_quota,
+            streak: data.checkin_streak,
+          });
+        }
+      } catch {
+        // 忽略：未登录用户无签到入口
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [session, pathname]);
+
+  const handleCheckin = async () => {
+    if (isCheckinPending) {
+      return;
+    }
+    setIsCheckinPending(true);
+    try {
+      const data = await doCheckin();
+      setCheckinStatus({
+        checkedToday: true,
+        bonus: data.bonus_quota,
+        streak: data.checkin_streak,
+      });
+      if (data.bonus_quota > 0) {
+        toast.success(`签到成功！获得 ${data.bonus_quota} 额度，已连续签到 ${data.checkin_streak} 天`);
+      } else {
+        toast.success(`签到成功！已连续签到 ${data.checkin_streak} 天`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "签到失败";
+      toast.error(message);
+    } finally {
+      setIsCheckinPending(false);
+    }
   };
 
   if (pathname === "/login" || session === undefined || !session) {
@@ -219,8 +296,28 @@ export function TopNav() {
           </nav>
           <div className="hidden items-center justify-end gap-2 sm:flex sm:gap-3">
             <HeaderActions />
+            {checkinStatus && session?.userId ? (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition"
+                onClick={() => void handleCheckin()}
+                disabled={isCheckinPending || checkinStatus.checkedToday}
+                title={checkinStatus.checkedToday ? "今天已签到" : `签到可领 ${checkinStatus.bonus} 额度`}
+              >
+                {checkinStatus.checkedToday ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-600">
+                    <CalendarCheck className="size-3.5" /> 已签到 · 连续 {checkinStatus.streak} 天
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-700 transition hover:bg-emerald-100">
+                    <CalendarCheck className="size-3.5" /> 签到{checkinStatus.bonus > 0 ? ` +${checkinStatus.bonus}` : ""}
+                  </span>
+                )}
+              </button>
+            ) : null}
             <span className="hidden rounded-md bg-stone-100 px-2 py-1 text-[10px] font-medium text-stone-500 dark:bg-white/8 dark:text-stone-300 sm:inline-block sm:text-[11px]">
               {roleLabel} · {displayName}
+              {session.quotaTotal !== undefined && session.quotaTotal >= 0 ? ` · 额度 ${session.quotaLeft ?? 0}` : ""}
             </span>
             <button
               type="button"

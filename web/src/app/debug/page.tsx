@@ -1,15 +1,22 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { LoaderCircle } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthGuard } from "@/lib/use-auth-guard";
 
-import { ChatPanel } from "./components/chat-panel";
-import { PptPanel } from "./components/ppt-panel";
-import { PsdPanel } from "./components/psd-panel";
-import { SearchPanel } from "./components/search-panel";
-import { SkillPanel } from "./components/skill-panel";
+// 面板按 Tab 懒加载（search-panel 引入 react-markdown，移出首屏）
+const panelLoading = () => (
+  <div className="flex items-center justify-center p-10">
+    <LoaderCircle className="size-5 animate-spin text-stone-400" />
+  </div>
+);
+const ChatPanel = dynamic(() => import("./components/chat-panel").then((m) => m.ChatPanel), { ssr: false, loading: panelLoading });
+const PptPanel = dynamic(() => import("./components/ppt-panel").then((m) => m.PptPanel), { ssr: false, loading: panelLoading });
+const PsdPanel = dynamic(() => import("./components/psd-panel").then((m) => m.PsdPanel), { ssr: false, loading: panelLoading });
+const SearchPanel = dynamic(() => import("./components/search-panel").then((m) => m.SearchPanel), { ssr: false, loading: panelLoading });
+const SkillPanel = dynamic(() => import("./components/skill-panel").then((m) => m.SkillPanel), { ssr: false, loading: panelLoading });
 
 const tabs = [
   { value: "skills", title: "搜索Skills" },

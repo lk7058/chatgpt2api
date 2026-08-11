@@ -21,6 +21,7 @@ import {
   createImageEditTask,
   createImageGenerationTask,
   fetchAccounts,
+  fetchMe,
   fetchModels,
   fetchImageTasks,
   resumeImagePoll,
@@ -80,7 +81,7 @@ function saveScrollPositions(positions: Map<string, number>) {
 }
 
 function clampImageCount(value: string) {
-  return String(Math.min(100, Math.max(1, Math.floor(Number(value) || 1))));
+  return String(Math.min(5, Math.max(1, Math.floor(Number(value) || 1))));
 }
 function parseImageSize(size: string) {
   const match = size.match(/^(\d+)x(\d+)$/);
@@ -478,6 +479,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [availableQuota, setAvailableQuota] = useState("加载中...");
+  const [userQuotaLeft, setUserQuotaLeft] = useState(-1);
   const [lightboxImages, setLightboxImages] = useState<ImageLightboxItem[]>([]);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -717,17 +719,48 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   }, []);
 
   const loadQuota = useCallback(async () => {
-    if (!isAdmin) {
-      setAvailableQuota("--");
-      return;
-    }
     try {
-      const data = await fetchAccounts();
-      setAvailableQuota(formatAvailableQuota(data.items));
+      // 用户剩余额度（登录用户均可查看）
+      const me = await fetchMe();
+      const quotaLeftNum = me.quota_total === undefined || me.quota_total < 0 ? -1 : Number(me.quota_left ?? 0);
+      setUserQuotaLeft(quotaLeftNum);
+      const userQuota = quotaLeftNum < 0 ? "不限" : String(quotaLeftNum);
+      if (!isAdmin) {
+        setAvailableQuota(userQuota);
+        return;
+      }
+      // 管理员显示：账号池额度 + 自己额度
+      try {
+        const data = await fetchAccounts();
+        const poolQuota = formatAvailableQuota(data.items);
+        setAvailableQuota(`${poolQuota}（我 ${userQuota}）`);
+      } catch {
+        setAvailableQuota(userQuota);
+      }
     } catch {
       setAvailableQuota((prev) => (prev === "加载中..." ? "--" : prev));
     }
   }, [isAdmin]);
+
+  // 可生成数量上限：最多 5 张；用户额度不足 5 时以剩余额度为准（额度为 0 或负数视为不限）
+  const maxImageCount = useMemo(() => {
+    if (userQuotaLeft < 0) {
+      return 5;
+    }
+    return Math.min(5, Math.max(0, userQuotaLeft));
+  }, [userQuotaLeft]);
+
+  // 额度变化时校准当前选择的张数，不超过上限
+  useEffect(() => {
+    if (maxImageCount <= 0) {
+      return;
+    }
+    setImageCount((current) => {
+      const currentNum = Number(current) || 1;
+      const next = Math.min(currentNum, maxImageCount);
+      return String(Math.max(1, next));
+    });
+  }, [maxImageCount]);
 
   useEffect(() => {
     if (didLoadQuotaRef.current) {
@@ -1551,6 +1584,30 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       return;
     }
 
+    // 先验证用户额度，再发送生图请求
+    const countToSubmit = parsedCount || 1;
+    if (userQuotaLeft >= 0 && userQuotaLeft < countToSubmit) {
+      toast.error(`额度不足：本次需要 ${countToSubmit} 额度，当前剩余 ${userQuotaLeft}`);
+      return;
+    }
+    if (userQuotaLeft === 0) {
+      toast.error("额度不足，请签到或联系管理员充值");
+      return;
+    }
+    try {
+      const me = await fetchMe();
+      const liveLeft = me.quota_total === undefined || me.quota_total < 0 ? -1 : Number(me.quota_left ?? 0);
+      if (liveLeft >= 0 && liveLeft < countToSubmit) {
+        toast.error(`额度不足：本次需要 ${countToSubmit} 额度，当前剩余 ${liveLeft}`);
+        return;
+      }
+      if (liveLeft >= 0) {
+        setUserQuotaLeft(liveLeft);
+      }
+    } catch {
+      // 额度查询失败不阻断提交，后端仍会二次校验
+    }
+
     const effectiveImageMode: ImageConversationMode = referenceImageFiles.length > 0 ? "edit" : "generate";
 
     const targetConversation = selectedConversationId
@@ -1730,6 +1787,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             imageModel={imageModel}
             imageModels={imageModels}
             availableQuota={availableQuota}
+            maxImageCount={maxImageCount}
             activeTaskCount={activeTaskCount}
             referenceImages={referenceImages}
             textareaRef={textareaRef}

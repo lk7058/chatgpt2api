@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { createUserKey, deleteUserKey, fetchUserKeys, updateUserKey, type UserKey } from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
 
 function formatDateTime(value?: string | null) {
   if (!value) {
@@ -164,7 +165,7 @@ export function UserKeysCard() {
 
   const handleCopy = async (value: string) => {
     try {
-      await navigator.clipboard.writeText(value);
+      await copyToClipboard(value);
       toast.success("已复制到剪贴板");
     } catch {
       toast.error("复制失败，请手动复制");

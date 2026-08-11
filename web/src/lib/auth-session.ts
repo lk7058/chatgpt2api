@@ -1,6 +1,6 @@
 "use client";
 
-import { login } from "@/lib/api";
+import { login, fetchMe } from "@/lib/api";
 import { clearStoredAuthSession, getStoredAuthSession, setStoredAuthSession, type StoredAuthSession } from "@/store/auth";
 
 export async function getValidatedAuthSession(): Promise<StoredAuthSession | null> {
@@ -16,7 +16,21 @@ export async function getValidatedAuthSession(): Promise<StoredAuthSession | nul
       role: data.role,
       subjectId: data.subject_id,
       name: data.name,
+      username: storedSession.username,
+      userId: storedSession.userId,
+      quotaLeft: storedSession.quotaLeft,
+      quotaTotal: storedSession.quotaTotal,
     };
+    // 刷新额度信息
+    try {
+      const me = await fetchMe();
+      nextSession.username = me.name || storedSession.username;
+      nextSession.userId = me.user ? me.user.id : storedSession.userId;
+      nextSession.quotaLeft = me.quota_left;
+      nextSession.quotaTotal = me.quota_total;
+    } catch {
+      // 额度刷新失败不影响登录
+    }
     await setStoredAuthSession(nextSession);
     return nextSession;
   } catch {

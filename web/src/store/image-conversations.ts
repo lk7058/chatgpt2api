@@ -3,6 +3,13 @@
 import localforage from "localforage";
 
 import type { ImageModel } from "@/lib/api";
+import {
+  clearGenerationRecords,
+  deleteGenerationRecord,
+  fetchGenerationRecords,
+  upsertGenerationRecord,
+} from "@/lib/api";
+import { getStoredAuthSession } from "@/store/auth";
 
 export type ImageConversationMode = "generate" | "edit";
 
@@ -225,6 +232,62 @@ function queueImageConversationWrite<T>(operation: () => Promise<T>): Promise<T>
   return result;
 }
 
+// ── 云同步：按登录账号记录到服务端（保留本地缓存兜底） ──────
+
+async function getSessionUserId(): Promise<string | null> {
+  try {
+    const session = await getStoredAuthSession();
+    return session?.userId || null;
+  } catch {
+    return null;
+  }
+}
+
+async function syncPushConversations(conversations: ImageConversation[]): Promise<void> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return;
+  }
+  try {
+    for (const conversation of conversations) {
+      await upsertGenerationRecord({
+        id: conversation.id,
+        kind: "image",
+        title: conversation.title || conversation.turns[0]?.prompt?.slice(0, 50) || "未命名",
+        payload: conversation,
+        created_at: conversation.createdAt,
+        updated_at: conversation.updatedAt,
+      });
+    }
+  } catch {
+    // 云同步失败不阻塞本地使用
+  }
+}
+
+async function syncPullConversations(): Promise<ImageConversation[] | null> {
+  const userId = await getSessionUserId();
+  if (!userId) {
+    return null;
+  }
+  try {
+    const data = await fetchGenerationRecords(500);
+    const items: ImageConversation[] = [];
+    for (const record of data.items) {
+      if (record.kind !== "image" || !record.payload) {
+        continue;
+      }
+      const conversation = normalizeConversation(record.payload as ImageConversation & Record<string, unknown>);
+      items.push(conversation);
+    }
+    if (items.length === 0 && data.items.length > 0) {
+      return null;
+    }
+    return items;
+  } catch {
+    return null;
+  }
+}
+
 async function readStoredImageConversations(): Promise<ImageConversation[]> {
   const items =
     (await imageConversationStorage.getItem<Array<ImageConversation & Record<string, unknown>>>(
@@ -234,6 +297,22 @@ async function readStoredImageConversations(): Promise<ImageConversation[]> {
 }
 
 export async function listImageConversations(): Promise<ImageConversation[]> {
+  const synced = await syncPullConversations();
+  if (synced !== null) {
+    // 合并服务端记录与本地缓存（服务端优先）
+    const local = await readStoredImageConversations();
+    const merged = new Map<string, ImageConversation>();
+    for (const conversation of synced) {
+      merged.set(conversation.id, conversation);
+    }
+    for (const conversation of local) {
+      const current = merged.get(conversation.id);
+      merged.set(conversation.id, current ? pickLatestConversation(current, conversation) : conversation);
+    }
+    const result = sortImageConversations([...merged.values()]);
+    void imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, result);
+    return result;
+  }
   return sortImageConversations(await readStoredImageConversations());
 }
 
@@ -245,10 +324,9 @@ export async function saveImageConversations(conversations: ImageConversation[])
       const current = conversationMap.get(conversation.id);
       conversationMap.set(conversation.id, current ? pickLatestConversation(current, conversation) : conversation);
     }
-    await imageConversationStorage.setItem(
-      IMAGE_CONVERSATIONS_KEY,
-      sortImageConversations([...conversationMap.values()]),
-    );
+    const nextItems = sortImageConversations([...conversationMap.values()]);
+    await imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, nextItems);
+    await syncPushConversations(nextItems);
   });
 }
 
@@ -263,6 +341,7 @@ export async function saveImageConversation(conversation: ImageConversation): Pr
       ...items.filter((item) => item.id !== persistedConversation.id),
     ]);
     await imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, nextItems);
+    await syncPushConversations([persistedConversation]);
   });
 }
 
@@ -277,6 +356,7 @@ export async function renameImageConversation(id: string, title: string): Promis
       ...items.filter((item) => item.id !== id),
     ]);
     await imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, nextItems);
+    await syncPushConversations([updated]);
   });
 }
 
@@ -287,12 +367,28 @@ export async function deleteImageConversation(id: string): Promise<void> {
       IMAGE_CONVERSATIONS_KEY,
       items.filter((item) => item.id !== id),
     );
+    const userId = await getSessionUserId();
+    if (userId) {
+      try {
+        await deleteGenerationRecord(id);
+      } catch {
+        // 忽略删除失败
+      }
+    }
   });
 }
 
 export async function clearImageConversations(): Promise<void> {
   await queueImageConversationWrite(async () => {
     await imageConversationStorage.removeItem(IMAGE_CONVERSATIONS_KEY);
+    const userId = await getSessionUserId();
+    if (userId) {
+      try {
+        await clearGenerationRecords();
+      } catch {
+        // 忽略清空失败
+      }
+    }
   });
 }
 

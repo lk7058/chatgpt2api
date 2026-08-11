@@ -21,6 +21,7 @@ type ImageComposerProps = {
   imageModel: ImageModel;
   imageModels: ImageModel[];
   availableQuota: string;
+  maxImageCount: number;
   activeTaskCount: number;
   referenceImages: Array<{ name: string; dataUrl: string }>;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
@@ -78,8 +79,7 @@ const aspectOptions = [
   { ratio: "9:16", tier: "4k", width: "2160", height: "3840", label: "9:16(4k)", icon: RectangleVertical },
   { ratio: "auto", tier: "auto", width: "1024", height: "1024", label: "auto", icon: null },
 ];
-const countOptions = Array.from({ length: 10 }, (_, index) => String(index + 1));
-
+const countOptions = Array.from({ length: 5 }, (_, index) => String(index + 1));
 export function ImageComposer({
   prompt,
   imageCount,
@@ -91,6 +91,7 @@ export function ImageComposer({
   imageModel,
   imageModels,
   availableQuota,
+  maxImageCount,
   activeTaskCount,
   referenceImages,
   textareaRef,
@@ -487,9 +488,9 @@ export function ImageComposer({
                           </div>
                         </div>
                         <div className="border-t border-stone-100 pt-3">
-                          <div className="mb-2 text-sm font-medium text-stone-900">生成数量</div>
-                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
-                            {countOptions.map((option) => {
+                          <div className="mb-2 text-sm font-medium text-stone-900">生成数量（最多 {Math.max(1, maxImageCount)} 张）</div>
+                          <div className="grid grid-cols-5 gap-2">
+                            {countOptions.slice(0, Math.max(1, maxImageCount)).map((option) => {
                               const active = imageCount === option;
                               return (
                                 <button
@@ -505,17 +506,10 @@ export function ImageComposer({
                                 </button>
                               );
                             })}
-                            <Input
-                              type="number"
-                              inputMode="numeric"
-                              min="1"
-                              max="100"
-                              step="1"
-                              value={imageCount}
-                              onChange={(event) => onImageCountChange(event.target.value)}
-                              className="h-9 rounded-full border-stone-200 bg-white px-3 text-center text-sm font-medium text-stone-800 shadow-none focus-visible:ring-0"
-                            />
                           </div>
+                          <p className="mt-2 text-xs text-stone-400">
+                            最多生成 {Math.max(1, maxImageCount)} 张（受额度限制，不足 5 时以剩余额度为准）
+                          </p>
                         </div>
                       </div>
                     ) : null}

@@ -29,6 +29,7 @@ import {
   type ProxyRuntimeEgressMode,
   type ProxyRuntimeSettings,
   type SettingsConfig,
+  type StreakBonus,
   type ThirdPartyAppsSettings,
 } from "@/lib/api";
 
@@ -108,6 +109,27 @@ function normalizeProxyRuntime(value: unknown): ProxyRuntimeSettings {
   };
 }
 
+function normalizeStreakBonuses(value: unknown): StreakBonus[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set<number>();
+  const items: StreakBonus[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) {
+      continue;
+    }
+    const days = Math.floor(Number((raw as { days?: unknown }).days));
+    const bonus = Math.floor(Number((raw as { bonus?: unknown }).bonus));
+    if (!Number.isFinite(days) || !Number.isFinite(bonus) || days < 1 || bonus < 1 || seen.has(days)) {
+      continue;
+    }
+    seen.add(days);
+    items.push({ days, bonus });
+  }
+  return items.sort((a, b) => a.days - b.days);
+}
+
 function normalizeThirdPartyApps(value: unknown): ThirdPartyAppsSettings {
   const source = typeof value === "object" && value !== null ? value as Partial<ThirdPartyAppsSettings> : {};
   const canvas: Partial<ThirdPartyAppsSettings["infinite_canvas"]> = typeof source.infinite_canvas === "object" && source.infinite_canvas
@@ -170,6 +192,8 @@ function normalizeConfig(config: SettingsConfig): SettingsConfig {
     ...config,
     refresh_account_interval_minute: Number(config.refresh_account_interval_minute || 5),
     image_retention_days: Number(config.image_retention_days || 30),
+    image_local_download_enabled: Boolean(config.image_local_download_enabled !== false),
+    image_local_retention_days: Number(config.image_local_retention_days || 7),
     image_poll_timeout_secs: Number(config.image_poll_timeout_secs || 120),
     image_account_concurrency: Number(config.image_account_concurrency || 3),
     image_settle_enabled: Boolean(config.image_settle_enabled !== false),
@@ -203,9 +227,35 @@ function normalizeConfig(config: SettingsConfig): SettingsConfig {
       webdav_password: String(imageStorage.webdav_password || ""),
       webdav_root_path: String(imageStorage.webdav_root_path || "chatgpt2api/images"),
       public_base_url: String(imageStorage.public_base_url || ""),
+      has_webdav_password: Boolean(imageStorage.has_webdav_password),
     },
     proxy_runtime: normalizeProxyRuntime(config.proxy_runtime),
     third_party_apps: normalizeThirdPartyApps(config.third_party_apps),
+    registration_enabled: Boolean(config.registration_enabled),
+    registration_bonus_quota: Number(config.registration_bonus_quota || 0),
+    checkin_bonus_quota: Number(config.checkin_bonus_quota || 0),
+    checkin_streak_bonuses: normalizeStreakBonuses(config.checkin_streak_bonuses),
+    site_title: String(config.site_title || "ChatGPT 号池管理"),
+    smtp: {
+      enabled: Boolean(config.smtp?.enabled),
+      host: String(config.smtp?.host || ""),
+      port: Number(config.smtp?.port || 465),
+      username: String(config.smtp?.username || ""),
+      password: String(config.smtp?.password || ""),
+      from: String(config.smtp?.from || ""),
+      from_name: String(config.smtp?.from_name || "chatgpt2api"),
+      use_ssl: Boolean(config.smtp?.use_ssl !== false),
+      has_password: Boolean(config.smtp?.has_password),
+    },
+    turnstile: {
+      enabled: Boolean(config.turnstile?.enabled),
+      site_key: String(config.turnstile?.site_key || ""),
+      secret_key: String(config.turnstile?.secret_key || ""),
+      has_secret_key: Boolean(config.turnstile?.has_secret_key),
+    },
+    model_quota_weights: (typeof config.model_quota_weights === "object" && config.model_quota_weights
+      ? config.model_quota_weights
+      : { default: 1 }) as Record<string, number>,
     backup: {
       ...backup,
       enabled: Boolean(backup.enabled),
@@ -293,6 +343,8 @@ type SettingsStore = {
   testBackup: () => Promise<void>;
   setRefreshAccountIntervalMinute: (value: string) => void;
   setImageRetentionDays: (value: string) => void;
+  setImageLocalDownloadEnabled: (value: boolean) => void;
+  setImageLocalRetentionDays: (value: string) => void;
   setImagePollTimeoutSecs: (value: string) => void;
   setImageAccountConcurrency: (value: string) => void;
   setImageSettleEnabled: (value: boolean) => void;
@@ -311,6 +363,14 @@ type SettingsStore = {
   setDefaultUpstreamModelName: (value: string) => void;
   setDefaultThinkingEffort: (value: "auto" | "standard" | "extended" | "max") => void;
   setSensitiveWordsText: (value: string) => void;
+  setRegistrationEnabled: (value: boolean) => void;
+  setRegistrationBonusQuota: (value: string) => void;
+  setCheckinBonusQuota: (value: string) => void;
+  setCheckinStreakBonuses: (value: StreakBonus[]) => void;
+  setSiteTitle: (value: string) => void;
+  setSMTPField: <K extends keyof NonNullable<SettingsConfig["smtp"]>>(key: K, value: NonNullable<SettingsConfig["smtp"]>[K]) => void;
+  setTurnstileField: <K extends keyof NonNullable<SettingsConfig["turnstile"]>>(key: K, value: NonNullable<SettingsConfig["turnstile"]>[K]) => void;
+  setModelQuotaWeights: (weights: Record<string, number>) => void;
   setAIReviewField: (key: "enabled" | "base_url" | "api_key" | "model" | "prompt", value: string | boolean) => void;
   setImageStorageField: (key: keyof ImageStorageSettings, value: string | boolean) => void;
   setProxyRuntimeField: <K extends keyof ProxyRuntimeSettings>(key: K, value: ProxyRuntimeSettings[K]) => void;
@@ -384,7 +444,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
     const isConfigured = Boolean(
       String(backup?.account_id || "").trim()
       && String(backup?.access_key_id || "").trim()
-      && String(backup?.secret_access_key || "").trim()
+      && (Boolean(backup?.has_secret_access_key) || Boolean(String(backup?.secret_access_key || "").trim()))
       && String(backup?.bucket || "").trim(),
     );
     if (isConfigured) {
@@ -421,6 +481,8 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         ...config,
         refresh_account_interval_minute: Math.max(1, Number(config.refresh_account_interval_minute) || 1),
         image_retention_days: Math.max(1, Number(config.image_retention_days) || 30),
+        image_local_download_enabled: Boolean(config.image_local_download_enabled !== false),
+        image_local_retention_days: Math.max(1, Number(config.image_local_retention_days) || 7),
         image_poll_timeout_secs: Math.max(1, Number(config.image_poll_timeout_secs) || 120),
         image_account_concurrency: Math.max(1, Number(config.image_account_concurrency) || 3),
         image_settle_enabled: Boolean(config.image_settle_enabled !== false),
@@ -482,6 +544,29 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
             url: String(config.third_party_apps?.infinite_canvas?.url || DEFAULT_THIRD_PARTY_APPS.infinite_canvas.url).trim(),
           },
         },
+        registration_enabled: Boolean(config.registration_enabled),
+        registration_bonus_quota: Math.max(0, Number(config.registration_bonus_quota) || 0),
+        checkin_bonus_quota: Math.max(0, Number(config.checkin_bonus_quota) || 0),
+        checkin_streak_bonuses: normalizeStreakBonuses(config.checkin_streak_bonuses),
+        site_title: String(config.site_title || "ChatGPT 号池管理").trim() || "ChatGPT 号池管理",
+        smtp: {
+          enabled: Boolean(config.smtp?.enabled),
+          host: String(config.smtp?.host || "").trim(),
+          port: Math.max(1, Number(config.smtp?.port) || 465),
+          username: String(config.smtp?.username || "").trim(),
+          password: String(config.smtp?.password || "").trim(),
+          from: String(config.smtp?.from || "").trim(),
+          from_name: String(config.smtp?.from_name || "chatgpt2api").trim(),
+          use_ssl: Boolean(config.smtp?.use_ssl !== false),
+        },
+        turnstile: {
+          enabled: Boolean(config.turnstile?.enabled),
+          site_key: String(config.turnstile?.site_key || "").trim(),
+          secret_key: String(config.turnstile?.secret_key || "").trim(),
+        },
+        model_quota_weights: (typeof config.model_quota_weights === "object" && config.model_quota_weights
+          ? config.model_quota_weights
+          : { default: 1 }) as Record<string, number>,
         backup: {
           ...(config.backup as BackupSettings),
           account_id: String(config.backup?.account_id || "").trim(),
@@ -524,6 +609,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   setImageRetentionDays: (value) => {
     set((state) => state.config ? { config: { ...state.config, image_retention_days: value } } : {});
+  },
+
+  setImageLocalDownloadEnabled: (value) => {
+    set((state) => state.config ? { config: { ...state.config, image_local_download_enabled: value } } : {});
+  },
+
+  setImageLocalRetentionDays: (value) => {
+    set((state) => state.config ? { config: { ...state.config, image_local_retention_days: value } } : {});
   },
 
   setImagePollTimeoutSecs: (value) => {
@@ -622,6 +715,38 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   setSensitiveWordsText: (value) => {
     set((state) => state.config ? { config: { ...state.config, sensitive_words: value.split("\n") } } : {});
+  },
+
+  setRegistrationEnabled: (value) => {
+    set((state) => state.config ? { config: { ...state.config, registration_enabled: value } } : {});
+  },
+
+  setRegistrationBonusQuota: (value) => {
+    set((state) => state.config ? { config: { ...state.config, registration_bonus_quota: value } } : {});
+  },
+
+  setCheckinBonusQuota: (value) => {
+    set((state) => state.config ? { config: { ...state.config, checkin_bonus_quota: value } } : {});
+  },
+
+  setCheckinStreakBonuses: (value) => {
+    set((state) => state.config ? { config: { ...state.config, checkin_streak_bonuses: value } } : {});
+  },
+
+  setSiteTitle: (value) => {
+    set((state) => state.config ? { config: { ...state.config, site_title: value } } : {});
+  },
+
+  setSMTPField: (key, value) => {
+    set((state) => state.config ? { config: { ...state.config, smtp: { ...(state.config.smtp || {}), [key]: value } } } : {});
+  },
+
+  setTurnstileField: (key, value) => {
+    set((state) => state.config ? { config: { ...state.config, turnstile: { ...(state.config.turnstile || {}), [key]: value } } } : {});
+  },
+
+  setModelQuotaWeights: (weights) => {
+    set((state) => state.config ? { config: { ...state.config, model_quota_weights: weights } } : {});
   },
 
   setAIReviewField: (key, value) => {

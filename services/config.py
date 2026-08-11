@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 import time
 
@@ -102,6 +103,28 @@ def _normalize_positive_int(value: object, default: int, minimum: int = 0) -> in
     except (OverflowError, TypeError, ValueError):
         normalized = default
     return max(minimum, normalized)
+
+
+def _normalize_streak_bonuses(value: object) -> list[dict[str, int]]:
+    """归一化连续签到奖励档位：[{days, bonus}]，按 days 升序、去重、过滤非法项。"""
+    if not isinstance(value, list):
+        return []
+    items: list[dict[str, int]] = []
+    seen: set[int] = set()
+    for raw in value:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            days = int(raw.get("days"))
+            bonus = int(raw.get("bonus"))
+        except (OverflowError, TypeError, ValueError):
+            continue
+        if days < 1 or bonus < 1 or days in seen:
+            continue
+        seen.add(days)
+        items.append({"days": days, "bonus": bonus})
+    items.sort(key=lambda item: item["days"])
+    return items
 
 
 def _normalize_backup_include(value: object) -> dict[str, bool]:
@@ -287,6 +310,167 @@ def _normalize_third_party_apps_settings(value: object) -> dict[str, object]:
     }
 
 
+DEFAULT_MODEL_QUOTA_WEIGHTS = {
+    "default": 1,
+    "gpt-5": 2,
+    "gpt-5.1": 2,
+    "gpt-5-5": 2,
+    "gpt-image-2": 2,
+    "gpt-4o": 1,
+}
+
+
+def _normalize_model_quota_weights(value: object) -> dict[str, object]:
+    source = value if isinstance(value, dict) else {}
+    normalized: dict[str, object] = {}
+    for key, item in source.items():
+        key = str(key or "").strip()
+        if not key:
+            continue
+        try:
+            weight = int(item)
+        except (TypeError, ValueError):
+            weight = 1
+        normalized[key] = max(1, weight)
+    if "default" not in normalized:
+        normalized["default"] = 1
+    return normalized
+
+
+def _normalize_third_party_api_item(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    name = str(value.get("name") or "").strip()
+    base_url = str(value.get("base_url") or "").strip()
+    if not name or not base_url:
+        return None
+    api_key = str(value.get("api_key") or "").strip()
+    models = value.get("models")
+    if isinstance(models, list):
+        models = [str(item or "").strip() for item in models if str(item or "").strip()]
+    else:
+        models = []
+    return {
+        "id": str(value.get("id") or "").strip() or uuid.uuid4().hex[:8],
+        "name": name,
+        "base_url": base_url,
+        "api_key": api_key,
+        "models": models,
+        "enabled": _normalize_bool(value.get("enabled"), True),
+        "default": _normalize_bool(value.get("default"), False),
+        "created_at": str(value.get("created_at") or "").strip(),
+    }
+
+
+# ── 第三方 API 密钥独立存储 ──────────────────────────────────
+# Key 单独保存在 data/third_party_keys.json，config.json 只存脱敏配置，
+# 避免 config.json 被整体覆盖/替换时丢失密钥。
+
+THIRD_PARTY_KEYS_FILE = DATA_DIR / "third_party_keys.json"
+
+
+def _load_third_party_keys() -> dict[str, str]:
+    try:
+        data = json.loads(THIRD_PARTY_KEYS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(key): str(value or "").strip() for key, value in data.items()}
+
+
+def _save_third_party_keys(keys: dict[str, str]) -> None:
+    THIRD_PARTY_KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    THIRD_PARTY_KEYS_FILE.write_text(
+        json.dumps(keys, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def get_third_party_api_key(api_id: str) -> str:
+    return _load_third_party_keys().get(str(api_id or ""), "")
+
+
+def set_third_party_api_key(api_id: str, api_key: str) -> None:
+    api_id = str(api_id or "").strip()
+    if not api_id:
+        return
+    keys = _load_third_party_keys()
+    api_key = str(api_key or "").strip()
+    if api_key:
+        keys[api_id] = api_key
+    else:
+        keys.pop(api_id, None)
+    _save_third_party_keys(keys)
+
+
+def _normalize_third_party_apis(value: object) -> list[dict[str, object]]:
+    source = value if isinstance(value, list) else []
+    return [
+        item
+        for raw in source
+        if (item := _normalize_third_party_api_item(raw)) is not None
+    ]
+
+
+def _normalize_admin_account(value: object) -> dict[str, object]:
+    source = value if isinstance(value, dict) else {}
+    return {
+        "username": str(source.get("username") or "").strip(),
+        "password": str(source.get("password") or "").strip(),
+        "email": str(source.get("email") or "").strip().lower(),
+    }
+
+
+def _normalize_registration(value: object) -> dict[str, object]:
+    source = value if isinstance(value, dict) else {}
+    return {
+        "enabled": _normalize_bool(source.get("enabled"), False),
+    }
+
+
+DEFAULT_SMTP = {
+    "enabled": False,
+    "host": "",
+    "port": 465,
+    "username": "",
+    "password": "",
+    "from": "",
+    "from_name": "chatgpt2api",
+    "use_ssl": True,
+}
+
+
+DEFAULT_TURNSTILE = {
+    "enabled": False,
+    "site_key": "",
+    "secret_key": "",
+}
+
+
+def _normalize_turnstile(value: object) -> dict[str, object]:
+    source = value if isinstance(value, dict) else {}
+    return {
+        "enabled": _normalize_bool(source.get("enabled"), False),
+        "site_key": str(source.get("site_key") or "").strip(),
+        "secret_key": str(source.get("secret_key") or "").strip(),
+    }
+
+
+def _normalize_smtp(value: object) -> dict[str, object]:
+    source = value if isinstance(value, dict) else {}
+    return {
+        "enabled": _normalize_bool(source.get("enabled"), False),
+        "host": str(source.get("host") or "").strip(),
+        "port": _normalize_positive_int(source.get("port"), 465, 1),
+        "username": str(source.get("username") or "").strip(),
+        "password": str(source.get("password") or "").strip(),
+        "from": str(source.get("from") or "").strip(),
+        "from_name": str(source.get("from_name") or "chatgpt2api").strip(),
+        "use_ssl": _normalize_bool(source.get("use_ssl"), True),
+    }
+
+
 def _validate_image_storage_settings(settings: dict[str, object]) -> None:
     if not _normalize_bool(settings.get("enabled"), False):
         return
@@ -390,6 +574,22 @@ class ConfigStore:
             return max(1, int(self.data.get("image_retention_days", 30)))
         except (TypeError, ValueError):
             return 30
+
+    @property
+    def image_local_download_enabled(self) -> bool:
+        """第三方图片生成成功后，是否下载到本地服务器再展示（避免暴露源站地址）。"""
+        value = self.data.get("image_local_download_enabled", True)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    @property
+    def image_local_retention_days(self) -> int:
+        """下载到本地的第三方图片保留天数，到期自动删除。"""
+        try:
+            return max(1, int(self.data.get("image_local_retention_days", 7)))
+        except (TypeError, ValueError):
+            return 7
 
     @property
     def image_poll_timeout_secs(self) -> int:
@@ -531,7 +731,9 @@ class ConfigStore:
         return path
 
     def cleanup_old_images(self) -> int:
-        cutoff = time.time() - self.image_retention_days * 86400
+        # 本地图片保留天数：优先使用第三方镜像保留配置（默认 7 天）
+        retention_days = self.image_local_retention_days if self.image_local_download_enabled else self.image_retention_days
+        cutoff = time.time() - retention_days * 86400
         removed = 0
         for path in self.images_dir.rglob("*"):
             if path.is_file() and path.stat().st_mtime < cutoff:
@@ -560,6 +762,122 @@ class ConfigStore:
             return "0.0.0"
         return value or "0.0.0"
 
+    @property
+    def admin_account(self) -> dict[str, str]:
+        normalized = _normalize_admin_account(self.data.get("admin_account"))
+        return {
+            "username": str(normalized.get("username") or ""),
+            "password": str(normalized.get("password") or ""),
+            "email": str(normalized.get("email") or ""),
+        }
+
+    @property
+    def registration_enabled(self) -> bool:
+        return _normalize_bool(self.data.get("registration_enabled"), False)
+
+    @property
+    def registration_bonus_quota(self) -> int:
+        """新用户注册时赠送的额度（0 表示不赠送）。"""
+        return _normalize_positive_int(self.data.get("registration_bonus_quota"), 0)
+
+    @property
+    def site_title(self) -> str:
+        """网站标题（浏览器标签页显示）。"""
+        value = str(self.data.get("site_title") or "").strip()
+        return value or "ChatGPT 号池管理"
+
+    @property
+    def smtp_settings(self) -> dict[str, object]:
+        return _normalize_smtp(self.data.get("smtp"))
+
+    @property
+    def turnstile_settings(self) -> dict[str, object]:
+        return _normalize_turnstile(self.data.get("turnstile"))
+
+    def get_public_turnstile_settings(self) -> dict[str, object]:
+        settings = self.turnstile_settings
+        secret_key = str(settings.get("secret_key") or "")
+        public = dict(settings)
+        public["secret_key"] = ""
+        public["has_secret_key"] = bool(secret_key)
+        return public
+
+    def get_public_smtp_settings(self) -> dict[str, object]:
+        settings = self.smtp_settings
+        password = str(settings.get("password") or "")
+        public = dict(settings)
+        public["password"] = ""
+        public["has_password"] = bool(password)
+        return public
+
+    @property
+    def checkin_bonus_quota(self) -> int:
+        """用户每日签到赠送的额度（0 表示不赠送）。"""
+        return _normalize_positive_int(self.data.get("checkin_bonus_quota"), 0)
+
+    @property
+    def checkin_streak_bonuses(self) -> list[dict[str, int]]:
+        """连续签到奖励档位：连续签到满 days 天时额外奖励 bonus 额度。"""
+        return _normalize_streak_bonuses(self.data.get("checkin_streak_bonuses"))
+
+    @property
+    def model_quota_weights(self) -> dict[str, object]:
+        return _normalize_model_quota_weights(self.data.get("model_quota_weights"))
+
+    @property
+    def third_party_apis(self) -> list[dict[str, object]]:
+        items = _normalize_third_party_apis(self.data.get("third_party_apis"))
+        keys = _load_third_party_keys()
+        result: list[dict[str, object]] = []
+        for item in items:
+            api_id = str(item.get("id") or "")
+            stored_key = keys.get(api_id, "")
+            # 兼容迁移：config.json 内旧 key 首次迁移到独立存储
+            old_key = str(item.get("api_key") or "").strip()
+            if stored_key:
+                effective_key = stored_key
+            elif old_key:
+                effective_key = old_key
+                keys[api_id] = old_key
+                _save_third_party_keys(keys)
+            else:
+                effective_key = ""
+            next_item = dict(item)
+            next_item["api_key"] = effective_key
+            result.append(next_item)
+        return result
+
+    def get_third_party_apis_settings(self) -> list[dict[str, object]]:
+        """对外暴露第三方 API 配置（隐藏 api_key，仅保留 has_api_key）。"""
+        items = self.third_party_apis
+        result: list[dict[str, object]] = []
+        for item in items:
+            api_key = str(item.get("api_key") or "")
+            result.append({
+                "id": item.get("id"),
+                "name": item.get("name"),
+                "base_url": item.get("base_url"),
+                "has_api_key": bool(api_key),
+                "models": item.get("models"),
+                "enabled": item.get("enabled"),
+                "default": item.get("default"),
+                "created_at": item.get("created_at"),
+            })
+        return result
+
+    def get_model_quota_weight(self, model: str) -> int:
+        """根据模型名获取额度权重（支持前缀匹配）。"""
+        weights = self.model_quota_weights
+        requested = str(model or "").strip().lower()
+        if not requested:
+            return int(weights.get("default", 1))
+        if requested in weights:
+            return int(weights[requested])
+        for key, weight in weights.items():
+            if key != "default" and requested.startswith(str(key).lower()):
+                return int(weight)
+        return int(weights.get("default", 1))
+
     def get(self) -> dict[str, object]:
         data = dict(self.data)
         data["refresh_account_interval_minute"] = self.refresh_account_interval_minute
@@ -580,11 +898,27 @@ class ConfigStore:
         data["global_system_prompt"] = self.global_system_prompt
         data["default_upstream_model_name"] = self.default_upstream_model_name
         data["default_thinking_effort"] = self.default_thinking_effort
-        data["backup"] = self.get_backup_settings()
-        data["image_storage"] = self.get_image_storage_settings()
+        data["backup"] = self.get_public_backup_settings()
+        data["image_storage"] = self.get_public_image_storage_settings()
         data["chat_completion_cache"] = self.get_chat_completion_cache_settings()
         data["proxy_runtime"] = self.get_public_proxy_runtime_settings()
         data["third_party_apps"] = self.get_third_party_apps_settings()
+        data["registration_enabled"] = self.registration_enabled
+        data["registration_bonus_quota"] = self.registration_bonus_quota
+        data["checkin_bonus_quota"] = self.checkin_bonus_quota
+        data["checkin_streak_bonuses"] = self.checkin_streak_bonuses
+        data["site_title"] = self.site_title
+        data["image_local_download_enabled"] = self.image_local_download_enabled
+        data["image_local_retention_days"] = self.image_local_retention_days
+        data["smtp"] = self.get_public_smtp_settings()
+        data["turnstile"] = self.get_public_turnstile_settings()
+        data["model_quota_weights"] = self.model_quota_weights
+        data["third_party_apis"] = self.get_third_party_apis_settings()
+        admin_account = self.admin_account
+        data["admin_account"] = {
+            "username": admin_account.get("username", ""),
+            "has_password": bool(admin_account.get("password", "")),
+        }
         data.pop("auth-key", None)
         return data
 
@@ -613,8 +947,24 @@ class ConfigStore:
         next_data = dict(self.data)
         next_data.update(dict(data or {}))
         if "backup" in next_data:
+            incoming_backup = next_data.get("backup")
+            if isinstance(incoming_backup, dict):
+                incoming_backup = dict(incoming_backup)
+                previous_backup = self.get_backup_settings()
+                if not str(incoming_backup.get("secret_access_key") or "").strip():
+                    incoming_backup["secret_access_key"] = str(previous_backup.get("secret_access_key") or "")
+                if not str(incoming_backup.get("passphrase") or "").strip():
+                    incoming_backup["passphrase"] = str(previous_backup.get("passphrase") or "")
+                next_data["backup"] = incoming_backup
             next_data["backup"] = _normalize_backup_settings(next_data.get("backup"))
         if "image_storage" in next_data:
+            incoming_storage = next_data.get("image_storage")
+            if isinstance(incoming_storage, dict):
+                incoming_storage = dict(incoming_storage)
+                previous_storage = self.get_image_storage_settings()
+                if not str(incoming_storage.get("webdav_password") or "").strip():
+                    incoming_storage["webdav_password"] = str(previous_storage.get("webdav_password") or "")
+                next_data["image_storage"] = incoming_storage
             next_data["image_storage"] = _normalize_image_storage_settings(next_data.get("image_storage"))
             _validate_image_storage_settings(next_data["image_storage"])
         if "chat_completion_cache" in next_data:
@@ -623,6 +973,40 @@ class ConfigStore:
             )
         if "third_party_apps" in next_data:
             next_data["third_party_apps"] = _normalize_third_party_apps_settings(next_data.get("third_party_apps"))
+        if "registration_enabled" in next_data:
+            next_data["registration_enabled"] = _normalize_bool(next_data.get("registration_enabled"), False)
+        if "registration_bonus_quota" in next_data:
+            next_data["registration_bonus_quota"] = _normalize_positive_int(next_data.get("registration_bonus_quota"), 0)
+        if "checkin_bonus_quota" in next_data:
+            next_data["checkin_bonus_quota"] = _normalize_positive_int(next_data.get("checkin_bonus_quota"), 0)
+        if "checkin_streak_bonuses" in next_data:
+            next_data["checkin_streak_bonuses"] = _normalize_streak_bonuses(next_data.get("checkin_streak_bonuses"))
+        if "image_local_download_enabled" in next_data:
+            next_data["image_local_download_enabled"] = _normalize_bool(next_data.get("image_local_download_enabled"), True)
+        if "image_local_retention_days" in next_data:
+            next_data["image_local_retention_days"] = _normalize_positive_int(next_data.get("image_local_retention_days"), 7, 1)
+        if "model_quota_weights" in next_data:
+            next_data["model_quota_weights"] = _normalize_model_quota_weights(next_data.get("model_quota_weights"))
+        if "third_party_apis" in next_data:
+            next_data["third_party_apis"] = _normalize_third_party_apis(next_data.get("third_party_apis"))
+        if "admin_account" in next_data:
+            next_data["admin_account"] = _normalize_admin_account(next_data.get("admin_account"))
+        if "smtp" in next_data:
+            incoming_smtp = next_data.get("smtp")
+            if isinstance(incoming_smtp, dict):
+                previous = self.smtp_settings
+                incoming_smtp = dict(incoming_smtp)
+                if not str(incoming_smtp.get("password") or "").strip():
+                    incoming_smtp["password"] = str(previous.get("password") or "")
+            next_data["smtp"] = _normalize_smtp(incoming_smtp)
+        if "turnstile" in next_data:
+            incoming_turnstile = next_data.get("turnstile")
+            if isinstance(incoming_turnstile, dict):
+                previous = self.turnstile_settings
+                incoming_turnstile = dict(incoming_turnstile)
+                if not str(incoming_turnstile.get("secret_key") or "").strip():
+                    incoming_turnstile["secret_key"] = str(previous.get("secret_key") or "")
+            next_data["turnstile"] = _normalize_turnstile(incoming_turnstile)
         if "proxy_runtime" in next_data:
             incoming_runtime = next_data.get("proxy_runtime")
             if isinstance(incoming_runtime, dict):
@@ -640,8 +1024,24 @@ class ConfigStore:
     def get_backup_settings(self) -> dict[str, object]:
         return _normalize_backup_settings(self.data.get("backup"))
 
+    def get_public_backup_settings(self) -> dict[str, object]:
+        """对外返回的备份配置：密钥/口令脱敏，用 has_* 标记是否已配置。"""
+        settings = dict(self.get_backup_settings())
+        settings["secret_access_key"] = ""
+        settings["has_secret_access_key"] = bool(str(self.get_backup_settings().get("secret_access_key") or ""))
+        settings["passphrase"] = ""
+        settings["has_passphrase"] = bool(str(self.get_backup_settings().get("passphrase") or ""))
+        return settings
+
     def get_image_storage_settings(self) -> dict[str, object]:
         return _normalize_image_storage_settings(self.data.get("image_storage"))
+
+    def get_public_image_storage_settings(self) -> dict[str, object]:
+        """对外返回的图片存储配置：密码脱敏，用 has_webdav_password 标记。"""
+        settings = dict(self.get_image_storage_settings())
+        settings["webdav_password"] = ""
+        settings["has_webdav_password"] = bool(str(self.get_image_storage_settings().get("webdav_password") or ""))
+        return settings
 
     def get_chat_completion_cache_settings(self) -> dict[str, object]:
         return _normalize_chat_completion_cache_settings(self.data.get("chat_completion_cache"))

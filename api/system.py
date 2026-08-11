@@ -25,6 +25,8 @@ from services.image_storage_service import ImageStorageError, image_storage_serv
 from services.image_tags_service import delete_tag, get_all_tags, set_tags
 from services.log_service import log_service
 from services.proxy_service import proxy_settings, test_clearance, test_proxy
+from services.third_party_api import list_models as list_third_party_models_endpoint
+from services.third_party_api import test_connection as test_third_party_connection
 
 
 class SettingsUpdateRequest(BaseModel):
@@ -58,19 +60,18 @@ class BackupDeleteRequest(BaseModel):
     key: str = ""
 
 
+class ThirdPartyApiUpsertRequest(BaseModel):
+    id: str = ""
+    name: str = ""
+    base_url: str = ""
+    api_key: str = ""
+    models: list[str] = []
+    enabled: bool = True
+    default: bool = False
+
+
 def create_router(app_version: str) -> APIRouter:
     router = APIRouter()
-
-    @router.post("/auth/login")
-    async def login(authorization: str | None = Header(default=None)):
-        identity = require_identity(authorization)
-        return {
-            "ok": True,
-            "version": app_version,
-            "role": identity.get("role"),
-            "subject_id": identity.get("id"),
-            "name": identity.get("name"),
-        }
 
     @router.get("/version")
     async def get_version():
@@ -97,15 +98,20 @@ def create_router(app_version: str) -> APIRouter:
     @router.get("/api/images")
     async def get_images(request: Request, start_date: str = "", end_date: str = "", authorization: str | None = Header(default=None)):
         require_admin(authorization)
-        return list_images(resolve_image_base_url(request), start_date=start_date.strip(), end_date=end_date.strip())
+        return await run_in_threadpool(
+            list_images,
+            resolve_image_base_url(request),
+            start_date=start_date.strip(),
+            end_date=end_date.strip(),
+        )
 
     @router.get("/images/{image_path:path}", include_in_schema=False)
     async def get_image(image_path: str):
-        return get_image_response(image_path)
+        return await run_in_threadpool(get_image_response, image_path)
 
     @router.get("/image-thumbnails/{image_path:path}", include_in_schema=False)
     async def get_image_thumbnail(image_path: str):
-        return get_thumbnail_response(image_path)
+        return await run_in_threadpool(get_thumbnail_response, image_path)
 
     @router.post("/api/images/delete")
     async def delete_images_endpoint(body: ImageDeleteRequest, authorization: str | None = Header(default=None)):
@@ -294,7 +300,10 @@ def create_router(app_version: str) -> APIRouter:
         return await run_in_threadpool(delete_to_target, target_free_mb, dry_run)
 
     @router.get("/health", response_model=None)
-    async def health_dashboard(format: str = Query(default="html")):
+    async def health_dashboard(format: str = Query(default="html"), authorization: str | None = Header(default=None)):
+        # JSON 模式泄露号池/存储情报，仅管理员可访问；HTML 模式保留公开（监控探针用）
+        if format == "json":
+            require_admin(authorization)
         from services.account_service import account_service as acct_svc
         stats = acct_svc.get_stats()
         storage = config.get_storage_backend()
@@ -361,5 +370,97 @@ td{{padding:8px 12px;border-top:1px solid #2a2d3a;font-size:14px}}tr:hover td{{b
 </table>
 <div class="refresh">JSON: <span class="api-url">/health?format=json</span></div>
 </div></body></html>""")
+
+    @router.get("/api/third-party-apis")
+    async def list_third_party_apis(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return {"items": config.get_third_party_apis_settings()}
+
+    @router.post("/api/third-party-apis")
+    async def upsert_third_party_api(body: ThirdPartyApiUpsertRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        name = body.name.strip()
+        base_url = body.base_url.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail={"error": "名称不能为空"})
+        if not base_url:
+            raise HTTPException(status_code=400, detail={"error": "API 地址不能为空"})
+        from services.config import _normalize_third_party_api_item
+        import uuid as _uuid
+
+        items = config.third_party_apis
+        incoming = {
+            "id": body.id.strip(),
+            "name": name,
+            "base_url": base_url,
+            "api_key": body.api_key.strip(),
+            "models": [str(item).strip() for item in body.models if str(item).strip()],
+            "enabled": body.enabled,
+            "default": body.default,
+        }
+        if incoming["id"]:
+            target = next((item for item in items if str(item.get("id")) == incoming["id"]), None)
+            if target is None:
+                raise HTTPException(status_code=404, detail={"error": "第三方 API 不存在"})
+            if not incoming["api_key"]:
+                incoming["api_key"] = str(target.get("api_key") or "")
+            incoming["created_at"] = str(target.get("created_at") or "")
+            items = [incoming if str(item.get("id")) == incoming["id"] else item for item in items]
+        else:
+            incoming["id"] = _uuid.uuid4().hex[:8]
+            incoming["created_at"] = ""
+            items = [*items, incoming]
+        # Key 单独保存到 data/third_party_keys.json，config.json 不落盘明文 Key
+        from services.config import set_third_party_api_key
+
+        set_third_party_api_key(str(incoming["id"]), str(incoming.get("api_key") or ""))
+        incoming["api_key"] = ""
+        items = [
+            {**item, "api_key": ""} if str(item.get("id")) == str(incoming["id"]) else item
+            for item in items
+        ]
+        normalized = _normalize_third_party_api_item(incoming)
+        if normalized is None:
+            raise HTTPException(status_code=400, detail={"error": "配置无效"})
+        try:
+            config.update({"third_party_apis": items})
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+        items_public = config.get_third_party_apis_settings()
+        item_public = next((item for item in items_public if str(item.get("id")) == str(incoming["id"])), None) or items_public[-1]
+        return {"item": item_public, "items": items_public}
+
+    @router.post("/api/third-party-apis/test")
+    async def test_third_party_api_endpoint(body: ThirdPartyApiUpsertRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        item = {
+            "name": body.name.strip(),
+            "base_url": body.base_url.strip(),
+            "api_key": body.api_key.strip(),
+        }
+        return {"result": await run_in_threadpool(test_third_party_connection, item)}
+
+    @router.post("/api/third-party-apis/models")
+    async def fetch_third_party_models_endpoint(body: ThirdPartyApiUpsertRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        item = {
+            "name": body.name.strip(),
+            "base_url": body.base_url.strip(),
+            "api_key": body.api_key.strip(),
+        }
+        return {"result": await run_in_threadpool(list_third_party_models_endpoint, item)}
+
+    @router.delete("/api/third-party-apis/{api_id}")
+    async def delete_third_party_api(api_id: str, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        items = config.third_party_apis
+        remaining = [item for item in items if str(item.get("id")) != str(api_id).strip()]
+        if len(remaining) == len(items):
+            raise HTTPException(status_code=404, detail={"error": "第三方 API 不存在"})
+        config.update({"third_party_apis": remaining})
+        from services.config import set_third_party_api_key
+
+        set_third_party_api_key(str(api_id).strip(), "")
+        return {"ok": True, "items": config.get_third_party_apis_settings()}
 
     return router

@@ -218,7 +218,13 @@ export function BackupSettingsCard() {
           </div>
           <div className="space-y-2">
             <label className="text-sm text-stone-700">Secret Access Key</label>
-            <Input type="password" value={String(backup.secret_access_key || "")} onChange={(event) => setBackupField("secret_access_key", event.target.value)} className="h-10 rounded-xl border-stone-200 bg-white" />
+            <Input
+              type="password"
+              value={String(backup.secret_access_key || "")}
+              onChange={(event) => setBackupField("secret_access_key", event.target.value)}
+              placeholder={backup.has_secret_access_key ? "已配置，留空保持不变" : "请输入 Secret Access Key"}
+              className="h-10 rounded-xl border-stone-200 bg-white"
+            />
           </div>
 
           <div className="space-y-2">
@@ -239,7 +245,13 @@ export function BackupSettingsCard() {
           </div>
           <div className="space-y-2">
             <label className="text-sm text-stone-700">加密口令</label>
-            <Input type="password" value={String(backup.passphrase || "")} onChange={(event) => setBackupField("passphrase", event.target.value)} placeholder={backup.encrypt ? "启用加密后必填" : "留空"} className="h-10 rounded-xl border-stone-200 bg-white" />
+            <Input
+              type="password"
+              value={String(backup.passphrase || "")}
+              onChange={(event) => setBackupField("passphrase", event.target.value)}
+              placeholder={backup.encrypt ? (backup.has_passphrase ? "已配置，留空保持不变" : "启用加密后必填") : "留空"}
+              className="h-10 rounded-xl border-stone-200 bg-white"
+            />
             <p className="text-xs text-stone-500">仅在启用加密时使用。请妥善保管，否则无法解密备份内容。</p>
           </div>
           </div>

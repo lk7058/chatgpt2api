@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+import time
 import uuid
 from datetime import datetime, timezone
 from threading import Lock
@@ -28,6 +29,10 @@ class AuthService:
         self._lock = Lock()
         self._items = self._load()
         self._last_used_flush_at: dict[str, datetime] = {}
+        self._last_reload_at = 0.0
+
+    # 读缓存 TTL：列表/鉴权在窗口内不重复读盘（写操作后内存已是最新）
+    RELOAD_TTL_SECS = 5.0
 
     @staticmethod
     def _clean(value: object) -> str:
@@ -50,11 +55,13 @@ class AuthService:
         name = self._clean(raw.get("name")) or self._default_name(role)
         created_at = self._clean(raw.get("created_at")) or _now_iso()
         last_used_at = self._clean(raw.get("last_used_at")) or None
+        user_id = self._clean(raw.get("user_id")) or None
         return {
             "id": item_id,
             "name": name,
             "role": role,
             "key_hash": key_hash,
+            "user_id": user_id,
             "enabled": bool(raw.get("enabled", True)),
             "created_at": created_at,
             "last_used_at": last_used_at,
@@ -72,7 +79,10 @@ class AuthService:
     def _save(self) -> None:
         self.storage.save_auth_keys(self._items)
 
-    def _reload_locked(self) -> None:
+    def _reload_locked(self, *, force: bool = False) -> None:
+        if not force and time.time() - self._last_reload_at < self.RELOAD_TTL_SECS:
+            return
+        self._last_reload_at = time.time()
         self._items = self._load()
 
     @staticmethod
@@ -81,6 +91,7 @@ class AuthService:
             "id": item.get("id"),
             "name": item.get("name"),
             "role": item.get("role"),
+            "user_id": item.get("user_id") or None,
             "enabled": bool(item.get("enabled", True)),
             "created_at": item.get("created_at"),
             "last_used_at": item.get("last_used_at"),
@@ -147,7 +158,7 @@ class AuthService:
             raise ValueError("这个名称已经在使用中了，换一个更容易区分的名称吧")
         return candidate
 
-    def create_key(self, *, role: AuthRole, name: str = "") -> tuple[dict[str, object], str]:
+    def create_key(self, *, role: AuthRole, name: str = "", user_id: str = "") -> tuple[dict[str, object], str]:
         with self._lock:
             self._reload_locked()
             normalized_name = self._build_name_locked(name, role=role)
@@ -163,6 +174,7 @@ class AuthService:
                 "name": normalized_name,
                 "role": role,
                 "key_hash": key_hash,
+                "user_id": self._clean(user_id) or None,
                 "enabled": True,
                 "created_at": _now_iso(),
                 "last_used_at": None,
@@ -170,6 +182,26 @@ class AuthService:
             self._items.append(item)
             self._save()
             return self._public_item(item), raw_key
+
+    def get_or_create_user_key(self, *, user_id: str, name: str = "", role: AuthRole = "user") -> tuple[dict[str, object], str]:
+        """为用户获取/创建一把专用密钥（用户登录会话使用）。
+
+        每个用户只维护一把会话密钥：已存在则复用并重置为启用状态，
+        不存在则创建新密钥。返回 (item, raw_key)。
+        """
+        user_id = self._clean(user_id)
+        if not user_id:
+            raise ValueError("user_id 不能为空")
+        with self._lock:
+            self._reload_locked()
+            for item in self._items:
+                if self._clean(item.get("user_id")) == user_id:
+                    item["enabled"] = True
+                    item["role"] = role
+                    item["name"] = self._clean(name) or item.get("name") or "会话密钥"
+                    self._save()
+                    return self._public_item(item), ""
+        return self.create_key(role=role, name=self._clean(name) or "会话密钥", user_id=user_id)
 
     def update_key(
         self,

@@ -1,26 +1,43 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useRef } from "react";
 import { LoaderCircle } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthGuard } from "@/lib/use-auth-guard";
 
-import { BackupSettingsCard } from "./components/backup-settings-card";
-import { ApiDocsCard } from "./components/api-docs-card";
-import { ConfigCard } from "./components/config-card";
-import { CPAPoolDialog } from "./components/cpa-pool-dialog";
-import { CPAPoolsCard } from "./components/cpa-pools-card";
-import { ImportBrowserDialog } from "./components/import-browser-dialog";
-import { ProxyRuntimeCard } from "./components/proxy-runtime-card";
-import { SettingsHeader } from "./components/settings-header";
-import { Sub2APIConnections } from "./components/sub2api-connections";
-import { ThirdPartyAppsCard } from "./components/third-party-apps-card";
-import { UserKeysCard } from "./components/user-keys-card";
 import { useSettingsStore } from "./store";
+
+// 卡片按 Tab 懒加载，避免首屏打包全部管理功能
+const cardLoading = () => (
+  <div className="flex items-center justify-center p-10">
+    <LoaderCircle className="size-5 animate-spin text-stone-400" />
+  </div>
+);
+const ConfigCard = dynamic(() => import("./components/config-card").then((m) => m.ConfigCard), { ssr: false, loading: cardLoading });
+const UserManagementCard = dynamic(() => import("./components/user-management-card").then((m) => m.UserManagementCard), { ssr: false, loading: cardLoading });
+const ThirdPartyApiCard = dynamic(() => import("./components/third-party-api-card").then((m) => m.ThirdPartyApiCard), { ssr: false, loading: cardLoading });
+const RedeemCodesCard = dynamic(() => import("./components/redeem-codes-card").then((m) => m.RedeemCodesCard), { ssr: false, loading: cardLoading });
+const SMTPCard = dynamic(() => import("./components/smtp-card").then((m) => m.SMTPCard), { ssr: false, loading: cardLoading });
+const ProxyRuntimeCard = dynamic(() => import("./components/proxy-runtime-card").then((m) => m.ProxyRuntimeCard), { ssr: false, loading: cardLoading });
+const BackupSettingsCard = dynamic(() => import("./components/backup-settings-card").then((m) => m.BackupSettingsCard), { ssr: false, loading: cardLoading });
+const UserKeysCard = dynamic(() => import("./components/user-keys-card").then((m) => m.UserKeysCard), { ssr: false, loading: cardLoading });
+const ThirdPartyAppsCard = dynamic(() => import("./components/third-party-apps-card").then((m) => m.ThirdPartyAppsCard), { ssr: false, loading: cardLoading });
+const ApiDocsCard = dynamic(() => import("./components/api-docs-card").then((m) => m.ApiDocsCard), { ssr: false, loading: cardLoading });
+const CPAPoolsCard = dynamic(() => import("./components/cpa-pools-card").then((m) => m.CPAPoolsCard), { ssr: false, loading: cardLoading });
+const Sub2APIConnections = dynamic(() => import("./components/sub2api-connections").then((m) => m.Sub2APIConnections), { ssr: false, loading: cardLoading });
+const CPAPoolDialog = dynamic(() => import("./components/cpa-pool-dialog").then((m) => m.CPAPoolDialog), { ssr: false });
+const ImportBrowserDialog = dynamic(() => import("./components/import-browser-dialog").then((m) => m.ImportBrowserDialog), { ssr: false });
+
+import { SettingsHeader } from "./components/settings-header";
 
 const settingsTabs = [
   { value: "basic", title: "基础配置" },
+  { value: "users", title: "用户管理" },
+  { value: "third-party", title: "第三方 API" },
+  { value: "redeem", title: "充值卡" },
+  { value: "smtp", title: "邮箱设置" },
   { value: "backup", title: "备份" },
   { value: "keys", title: "用户密钥" },
   { value: "api-docs", title: "接口接入" },
@@ -91,6 +108,18 @@ function SettingsPageContent() {
         </div>
         <TabsContent value="basic">
           <ConfigCard />
+        </TabsContent>
+        <TabsContent value="users">
+          <UserManagementCard />
+        </TabsContent>
+        <TabsContent value="third-party">
+          <ThirdPartyApiCard />
+        </TabsContent>
+        <TabsContent value="redeem">
+          <RedeemCodesCard />
+        </TabsContent>
+        <TabsContent value="smtp">
+          <SMTPCard />
         </TabsContent>
         <TabsContent value="proxy">
           <ProxyRuntimeCard />
