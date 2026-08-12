@@ -278,6 +278,7 @@ class UserService:
                         balance_after=initial_quota,
                         source="register",
                         note="注册赠送",
+                        email=str(user.get("email") or ""),
                     )
                 except Exception:
                     pass
@@ -385,6 +386,7 @@ class UserService:
                         balance_after=quota_total - int(user.get("quota_used", 0) or 0),
                         source="admin_grant",
                         note="管理员充值",
+                        email=str(user.get("email") or ""),
                     )
                 except Exception:
                     pass
@@ -419,6 +421,7 @@ class UserService:
                     balance_after=balance,
                     source="admin_grant",
                     note=note,
+                    email=str(user.get("email") or ""),
                 )
             except Exception:
                 pass
@@ -452,6 +455,7 @@ class UserService:
                     balance_after=balance,
                     source="admin_reduce",
                     note=note,
+                    email=str(user.get("email") or ""),
                 )
             except Exception:
                 pass
@@ -479,6 +483,7 @@ class UserService:
                         balance_after=0 - int(user.get("quota_used", 0) or 0),
                         source="admin_reset",
                         note=note,
+                        email=str(user.get("email") or ""),
                     )
                 except Exception:
                     pass
@@ -549,6 +554,7 @@ class UserService:
                     balance_after=balance,
                     source=str(source or "generate"),
                     note=str(note or ""),
+                    email=str(user.get("email") or ""),
                 )
             except Exception:
                 pass
@@ -727,6 +733,7 @@ class UserService:
                         balance_after=int(user["quota_total"]) - int(user.get("quota_used", 0) or 0),
                         source="checkin",
                         note="每日签到",
+                        email=str(user.get("email") or ""),
                     )
                 except Exception:
                     pass
@@ -741,6 +748,7 @@ class UserService:
                         balance_after=int(user["quota_total"]) - int(user.get("quota_used", 0) or 0),
                         source="checkin",
                         note=f"连续签到 {streak} 天奖励",
+                        email=str(user.get("email") or ""),
                     )
                 except Exception:
                     pass

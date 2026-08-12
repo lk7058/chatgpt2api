@@ -4,7 +4,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from api.rate_limit import code_limiter, login_limiter
-from api.support import require_admin, require_identity
+from api.support import client_ip, require_admin, require_identity
 from services.config import config
 from services.user_service import user_service
 
@@ -165,6 +165,9 @@ def create_router() -> APIRouter:
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+        from services.log_service import log_service
+
+        log_service.add("auth", "注册成功", {"email": email, "ip": client_ip(request)})
         token = user_service.create_session(user["id"])
         return {
             "ok": True,
@@ -243,15 +246,19 @@ def create_router() -> APIRouter:
         password = str(body.password or "").strip()
         if email and password:
             # 登录失败限流：同 IP+邮箱 5 次失败锁定 15 分钟
-            client_ip = request.client.host if request.client else ""
-            limiter_key = f"{client_ip}|{email}"
+            client_ip_addr = client_ip(request)
+            limiter_key = f"{client_ip_addr}|{email}"
             if login_limiter.is_blocked(limiter_key):
                 raise HTTPException(status_code=429, detail={"error": "尝试次数过多，请 15 分钟后再试"})
             user = user_service.authenticate(email, password)
+            from services.log_service import log_service
+
             if user is None:
                 login_limiter.record_failure(limiter_key)
+                log_service.add("auth", "登录失败", {"email": email, "ip": client_ip_addr, "status": "failed"})
                 raise HTTPException(status_code=401, detail={"error": "邮箱或密码错误"})
             login_limiter.clear(limiter_key)
+            log_service.add("auth", "登录成功", {"email": email, "ip": client_ip_addr, "status": "success"})
             token = user_service.create_session(user["id"])
             return {
                 "ok": True,
@@ -272,12 +279,20 @@ def create_router() -> APIRouter:
         }
 
     @router.post("/auth/logout")
-    async def logout(authorization: str | None = Header(default=None)):
+    async def logout(request: Request, authorization: str | None = Header(default=None)):
         from api.support import extract_bearer_token
 
         token = extract_bearer_token(authorization)
+        email = ""
         if token:
+            user = user_service.resolve_session(token)
+            if user is not None:
+                email = str(user.get("email") or user.get("username") or "")
             user_service.revoke_session(token)
+        if email:
+            from services.log_service import log_service
+
+            log_service.add("auth", "退出登录", {"email": email, "ip": client_ip(request), "status": "success"})
         return {"ok": True}
 
     @router.get("/api/me")
@@ -317,7 +332,7 @@ def create_router() -> APIRouter:
         return user_service.get_checkin_status(str(user_id))
 
     @router.post("/api/checkin")
-    async def do_checkin(authorization: str | None = Header(default=None)):
+    async def do_checkin(request: Request, authorization: str | None = Header(default=None)):
         identity = require_identity(authorization)
         user_id = identity.get("user_id")
         if not user_id:
@@ -325,6 +340,19 @@ def create_router() -> APIRouter:
         result = user_service.checkin(str(user_id))
         if not result.get("ok"):
             raise HTTPException(status_code=400, detail={"error": result.get("error") or "签到失败"})
+        user = user_service.get_public_user(str(user_id))
+        from services.log_service import log_service
+
+        log_service.add(
+            "checkin",
+            "签到成功",
+            {
+                "email": str((user or {}).get("email") or ""),
+                "ip": client_ip(request),
+                "bonus": result.get("bonus_quota", 0),
+                "streak": result.get("checkin_streak", 0),
+            },
+        )
         return result
 
     # ── 用户中心：额度流水 / 签到日历 / 修改密码 ─────────────

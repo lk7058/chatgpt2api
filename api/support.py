@@ -20,6 +20,18 @@ def extract_bearer_token(authorization: str | None) -> str:
     return value.strip()
 
 
+def client_ip(request: Request) -> str:
+    """获取客户端真实 IP：优先取 X-Forwarded-For（反代场景），否则取直连地址。"""
+    forwarded = str(request.headers.get("x-forwarded-for") or "").strip()
+    if forwarded:
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
+    if request.client is not None:
+        return str(request.client.host or "")
+    return ""
+
+
 def _legacy_admin_identity(token: str) -> dict[str, object] | None:
     import hmac
 

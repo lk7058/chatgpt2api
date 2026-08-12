@@ -57,6 +57,8 @@ class QuotaRecordService:
         balance_after: int,
         source: str,
         note: str = "",
+        ip: str = "",
+        email: str = "",
     ) -> dict[str, Any]:
         user_id = str(user_id or "")
         if not user_id:
@@ -80,6 +82,26 @@ class QuotaRecordService:
             items = self._records.setdefault(user_id, [])
             items.append(record)
             self._save()
+        # 额度变更审计日志（调用方传入 email，避免跨服务锁重入）
+        try:
+            from services.log_service import log_service
+
+            log_service.add(
+                "quota",
+                f"额度{'增加' if record['type'] == 'income' else '扣减'} {record['amount']}",
+                {
+                    "email": str(email or ""),
+                    "user_id": user_id,
+                    "type": record["type"],
+                    "amount": record["amount"],
+                    "balance_after": record["balance_after"],
+                    "source": record["source"],
+                    "note": record["note"],
+                    "ip": str(ip or ""),
+                },
+            )
+        except Exception:
+            pass
         return dict(record)
 
     def list_records(self, user_id: str, limit: int = 100) -> list[dict[str, Any]]:

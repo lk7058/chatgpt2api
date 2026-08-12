@@ -20,11 +20,17 @@ import { useAuthGuard } from "@/lib/use-auth-guard";
 const LogType = {
   Call: "call",
   Account: "account",
+  Auth: "auth",
+  Checkin: "checkin",
+  Quota: "quota",
 } as const;
 
 const typeLabels: Record<string, string> = {
   [LogType.Call]: "调用日志",
   [LogType.Account]: "账号管理日志",
+  [LogType.Auth]: "安全日志",
+  [LogType.Checkin]: "签到日志",
+  [LogType.Quota]: "额度日志",
 };
 
 function getDetailText(item: SystemLog, key: string) {
@@ -146,6 +152,9 @@ function LogsContent() {
             <SelectContent>
               <SelectItem value={LogType.Call}>调用日志</SelectItem>
               <SelectItem value={LogType.Account}>账号管理日志</SelectItem>
+              <SelectItem value={LogType.Auth}>安全日志（登录/退出/注册）</SelectItem>
+              <SelectItem value={LogType.Checkin}>签到日志</SelectItem>
+              <SelectItem value={LogType.Quota}>额度日志</SelectItem>
             </SelectContent>
           </Select>
           <DateRangeFilter startDate={startDate} endDate={endDate} onChange={(start, end) => { setStartDate(start); setEndDate(end); }} />
@@ -199,6 +208,8 @@ function LogsContent() {
                   {isCallLog ? <TableHead>调用耗时</TableHead> : null}
                   {isCallLog ? <TableHead>状态</TableHead> : null}
                   {isCallLog ? <TableHead className="w-36">图片</TableHead> : null}
+                  {!isCallLog ? <TableHead>用户</TableHead> : null}
+                  {!isCallLog ? <TableHead>IP</TableHead> : null}
                   <TableHead>简述</TableHead>
                   <TableHead className="w-40">操作</TableHead>
                 </TableRow>
@@ -247,6 +258,8 @@ function LogsContent() {
                           )}
                         </TableCell>
                       ) : null}
+                      {!isCallLog ? <TableCell className="whitespace-nowrap">{getDetailText(item, "email")}</TableCell> : null}
+                      {!isCallLog ? <TableCell className="whitespace-nowrap">{getDetailText(item, "ip")}</TableCell> : null}
                       <TableCell className="max-w-[420px] truncate text-stone-500">{item.summary || "-"}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
