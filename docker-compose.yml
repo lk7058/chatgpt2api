@@ -9,6 +9,8 @@ services:
       - ./data:/app/data
       - ./config.json:/app/config.json
     environment:
+      # 时区（默认北京时间，可按需修改，如 TZ=UTC）
+      - TZ=Asia/Shanghai
       # 存储后端配置 (可选值: json, sqlite, postgres, git)
        - STORAGE_BACKEND=json
       

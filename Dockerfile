@@ -30,13 +30,19 @@ WORKDIR /app
 # - git: Git 存储后端需要
 # - libpq-dev: PostgreSQL 客户端库
 # - gcc: 编译 psycopg2-binary 需要
+# - tzdata: 时区数据（TZ 生效需要）
 RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
     apt-get update && apt-get install -y --no-install-recommends \
     git \
     libpq-dev \
     gcc \
     openssl \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# 默认时区为北京时间（部署时可用 TZ 环境变量覆盖，如 TZ=UTC / TZ=America/New_York）
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone
 
 RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ uv
 
