@@ -119,8 +119,8 @@ def _download_image_bytes_parallel(url: str, api_key: str = "", timeout: int = 1
 def _mirror_image_item(item: dict[str, Any], base_url: str, api_key: str) -> dict[str, Any]:
     """把单个图片结果项下载到本地，返回替换 url 后的项。
 
-    优先使用 b64_json（无需下载），否则下载 url。
-    **本地化失败时抛错**（不返回第三方 URL，保证所有图片 URL 都走本地）。
+    - b64_json（图片随生成响应返回，无 CDN 下载）：始终本地化保存，与下载开关无关；
+    - url（需从 CDN 下载）：仅在 image_local_download_enabled 开启时镜像，否则保留第三方 url。
     """
     next_item = dict(item)
     b64 = str(item.get("b64_json") or "").strip()
@@ -139,6 +139,9 @@ def _mirror_image_item(item: dict[str, Any], base_url: str, api_key: str) -> dic
             logger.warning("mirror b64 failed: %s", exc)
 
     if url:
+        if not config.image_local_download_enabled:
+            # 未启用本地下载：保留第三方 url（不触发 CDN 下载）
+            return next_item
         try:
             data = _download_image_bytes_parallel(url, api_key=api_key)
             stored = image_storage_service.save(data, base_url=base_url or None)
@@ -151,13 +154,12 @@ def _mirror_image_item(item: dict[str, Any], base_url: str, api_key: str) -> dic
 
 
 def mirror_result_images(result: dict[str, Any], base_url: str, api_key: str = "") -> dict[str, Any]:
-    """处理图片生成/编辑结果：把 data 中的 url 替换为本地地址。
+    """处理图片生成/编辑结果：把 data 中的图片数据转成本地地址。
 
-    多张图片并发下载；任一图片本地化失败即抛错（调用方应使本次生成失败），
-    确保对外只暴露本地图片 URL。
+    - b64_json 始终本地化（无需 CDN 下载）；
+    - url 仅在 image_local_download_enabled 开启时镜像；
+    任一图片本地化失败即抛错（调用方应使本次生成失败）。
     """
-    if not config.image_local_download_enabled:
-        return result
     data = result.get("data")
     if not isinstance(data, list):
         return result
