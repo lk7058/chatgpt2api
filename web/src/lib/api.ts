@@ -1105,7 +1105,7 @@ export async function fetchImageStorage() {
   return httpRequest<ImageStorageStats>("/api/images/storage");
 }
 
-// ── 公告与广告 ─────────────────────────────────────────────
+// ── 公告 ─────────────────────────────────────────────
 export type PublicAnnouncement = {
   popup: { title: string; content: string } | null;
   banner: { title: string; content: string; link: string } | null;

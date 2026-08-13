@@ -49,7 +49,7 @@ const settingsTabs = [
   { value: "cpa", title: "CPA" },
   { value: "sub2api", title: "Sub2API" },
   { value: "cleanup", title: "数据清理" },
-  { value: "announce", title: "公告广告" },
+  { value: "announce", title: "公告" },
   { value: "tasks", title: "任务管理" },
 ];
 

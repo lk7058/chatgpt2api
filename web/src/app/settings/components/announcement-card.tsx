@@ -61,7 +61,7 @@ export function AnnouncementCard() {
         popup: form.popup,
         banner: form.banner,
       });
-      toast.success("已发布公告与广告");
+      toast.success("已发布公告");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存失败");
     } finally {
@@ -74,10 +74,10 @@ export function AnnouncementCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Megaphone className="size-4" />
-          公告与广告
+          公告
         </CardTitle>
         <CardDescription>
-          弹窗公告会在用户打开站点时弹出一次（同一内容只弹一次）；广告栏显示在页面顶部，用户可手动关闭。
+          弹窗公告会在用户打开站点时弹出一次（同一内容只弹一次）；公告栏显示在页面顶部，用户可手动关闭。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -122,7 +122,7 @@ export function AnnouncementCard() {
 
         <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50/60 p-4">
           <div className="flex items-center justify-between">
-            <Label className="text-sm font-semibold">广告显示栏</Label>
+            <Label className="text-sm font-semibold">公告显示栏</Label>
             <label className="flex items-center gap-2 text-sm text-stone-600">
               <Checkbox
                 checked={form.banner.enabled}
@@ -135,7 +135,7 @@ export function AnnouncementCard() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label className="text-xs text-stone-500">广告标题（可选）</Label>
+              <Label className="text-xs text-stone-500">公告标题（可选）</Label>
               <Input
                 value={form.banner.title}
                 onChange={(event) =>
@@ -146,14 +146,14 @@ export function AnnouncementCard() {
               />
             </div>
             <div>
-              <Label className="text-xs text-stone-500">广告文案</Label>
+              <Label className="text-xs text-stone-500">公告内容</Label>
               <Input
                 value={form.banner.content}
                 onChange={(event) =>
                   setForm((prev) => ({ ...prev, banner: { ...prev.banner, content: event.target.value } }))
                 }
                 className="mt-1 rounded-xl"
-                placeholder="广告显示内容"
+                placeholder="公告显示内容"
               />
             </div>
             <div className="sm:col-span-2">

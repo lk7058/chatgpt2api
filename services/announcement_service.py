@@ -16,7 +16,7 @@ def _now_iso() -> str:
 
 
 class AnnouncementService:
-    """公告与广告配置：弹窗公告（popup）+ 广告栏（banner），存 data/announcements.json。"""
+    """公告配置：弹窗公告（popup）+ 公告栏（banner），存 data/announcements.json。"""
 
     def __init__(self, path: Path = ANNOUNCEMENT_FILE):
         self.path = path
@@ -47,7 +47,7 @@ class AnnouncementService:
         tmp_path.replace(self.path)
 
     def get_public(self) -> dict[str, Any]:
-        """公开接口：只返回已启用的公告/广告。"""
+        """公开接口：只返回已启用的公告。"""
         with self._lock:
             popup = self._data.get("popup") or {}
             banner = self._data.get("banner") or {}

@@ -65,7 +65,7 @@ export function AnnouncementBanner() {
       )}
       <button
         type="button"
-        aria-label="关闭广告"
+        aria-label="关闭公告"
         onClick={() => {
           try {
             localStorage.setItem(BANNER_DISMISS_KEY, "1");
