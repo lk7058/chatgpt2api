@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 from typing import Any
 
 from curl_cffi import requests
@@ -12,17 +13,26 @@ from services.image_storage_service import image_storage_service
 logger = logging.getLogger("third_party_image_download")
 
 
-def _download_image_bytes(url: str, api_key: str = "", timeout: int = 120) -> bytes:
+def _download_image_bytes(url: str, api_key: str = "", timeout: int = 120, retries: int = 1) -> bytes:
     headers = {"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt2api image mirror"}
     # 部分中转站图片 URL 需要携带鉴权头才能访问
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
-    if not 200 <= resp.status_code < 300:
-        raise RuntimeError(f"download failed: HTTP {resp.status_code}")
-    if not resp.content:
-        raise RuntimeError("download failed: empty body")
-    return resp.content
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+            if not 200 <= resp.status_code < 300:
+                raise RuntimeError(f"download failed: HTTP {resp.status_code}")
+            if not resp.content:
+                raise RuntimeError("download failed: empty body")
+            return resp.content
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if attempt < retries:
+                time.sleep(1)
+    assert last_exc is not None
+    raise last_exc
 
 
 def _mirror_image_item(item: dict[str, Any], base_url: str, api_key: str) -> dict[str, Any]:
