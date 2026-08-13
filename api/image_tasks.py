@@ -5,7 +5,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from api.image_inputs import parse_image_edit_request, read_image_sources
-from api.support import require_identity, resolve_image_base_url
+from api.support import require_admin, require_identity, resolve_image_base_url
 from services.config import config
 from services.content_filter import check_request
 from services.image_task_service import image_task_service
@@ -22,6 +22,15 @@ class ImageGenerationTaskRequest(BaseModel):
 
 class ResumePollRequest(BaseModel):
     extra_timeout_secs: float = Field(default=30.0, ge=5.0, le=120.0)
+
+
+class CancelTasksRequest(BaseModel):
+    task_ids: list[str] = []
+
+
+class AdminCancelTasksRequest(BaseModel):
+    task_ids: list[str] = []
+    all_tasks: bool = False
 
 
 def _parse_task_ids(value: str) -> list[str]:
@@ -107,6 +116,29 @@ def create_router() -> APIRouter:
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+
+    @router.post("/api/image-tasks/cancel")
+    async def cancel_image_tasks(body: CancelTasksRequest, authorization: str | None = Header(default=None)):
+        """用户取消自己的排队/进行中任务。"""
+        identity = require_identity(authorization)
+        return await run_in_threadpool(image_task_service.cancel_tasks, identity, body.task_ids)
+
+    @router.get("/api/admin/image-tasks")
+    async def admin_list_image_tasks(authorization: str | None = Header(default=None)):
+        """管理员查看全部任务。"""
+        identity = require_admin(authorization)
+        return await run_in_threadpool(image_task_service.list_admin_tasks, identity)
+
+    @router.post("/api/admin/image-tasks/cancel")
+    async def admin_cancel_image_tasks(body: AdminCancelTasksRequest, authorization: str | None = Header(default=None)):
+        """管理员批量/一键取消未完成任务。"""
+        identity = require_admin(authorization)
+        return await run_in_threadpool(
+            image_task_service.cancel_tasks_admin,
+            identity,
+            body.task_ids,
+            body.all_tasks,
+        )
 
     @router.post("/api/image-tasks/{task_id}/resume-poll")
     async def resume_image_poll(

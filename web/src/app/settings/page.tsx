@@ -29,6 +29,7 @@ const CPAPoolsCard = dynamic(() => import("./components/cpa-pools-card").then((m
 const Sub2APIConnections = dynamic(() => import("./components/sub2api-connections").then((m) => m.Sub2APIConnections), { ssr: false, loading: cardLoading });
 const ImageCleanupCard = dynamic(() => import("./components/image-cleanup-card").then((m) => m.ImageCleanupCard), { ssr: false, loading: cardLoading });
 const AnnouncementCard = dynamic(() => import("./components/announcement-card").then((m) => m.AnnouncementCard), { ssr: false, loading: cardLoading });
+const AdminTasksCard = dynamic(() => import("./components/admin-tasks-card").then((m) => m.AdminTasksCard), { ssr: false, loading: cardLoading });
 const CPAPoolDialog = dynamic(() => import("./components/cpa-pool-dialog").then((m) => m.CPAPoolDialog), { ssr: false });
 const ImportBrowserDialog = dynamic(() => import("./components/import-browser-dialog").then((m) => m.ImportBrowserDialog), { ssr: false });
 
@@ -49,6 +50,7 @@ const settingsTabs = [
   { value: "sub2api", title: "Sub2API" },
   { value: "cleanup", title: "数据清理" },
   { value: "announce", title: "公告广告" },
+  { value: "tasks", title: "任务管理" },
 ];
 
 function SettingsDataController() {
@@ -151,6 +153,9 @@ function SettingsPageContent() {
         </TabsContent>
         <TabsContent value="announce">
           <AnnouncementCard />
+        </TabsContent>
+        <TabsContent value="tasks">
+          <AdminTasksCard />
         </TabsContent>
       </Tabs>
       <CPAPoolDialog />

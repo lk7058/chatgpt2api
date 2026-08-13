@@ -17,7 +17,8 @@ TASK_STATUS_QUEUED = "queued"
 TASK_STATUS_RUNNING = "running"
 TASK_STATUS_SUCCESS = "success"
 TASK_STATUS_ERROR = "error"
-TERMINAL_STATUSES = {TASK_STATUS_SUCCESS, TASK_STATUS_ERROR}
+TASK_STATUS_CANCELLED = "cancelled"
+TERMINAL_STATUSES = {TASK_STATUS_SUCCESS, TASK_STATUS_ERROR, TASK_STATUS_CANCELLED}
 UNFINISHED_STATUSES = {TASK_STATUS_QUEUED, TASK_STATUS_RUNNING}
 
 
@@ -80,6 +81,8 @@ def _public_task(task: dict[str, Any]) -> dict[str, Any]:
         item["usage"] = task.get("usage")
     if task.get("error"):
         item["error"] = task.get("error")
+    if task.get("cancel_reason"):
+        item["cancel_reason"] = task.get("cancel_reason")
     if task.get("progress"):
         item["progress"] = task.get("progress")
     if task.get("progress_step"):
@@ -216,6 +219,69 @@ class ImageTaskService:
                 missing_ids = []
             return {"items": items, "missing_ids": missing_ids}
 
+    def _mark_cancelled_locked(self, key: str, cancel_reason: str) -> bool:
+        """在持锁状态下把未完成任务标记为取消。"""
+        task = self._tasks.get(key)
+        if task is None or task.get("status") in TERMINAL_STATUSES:
+            return False
+        task["status"] = TASK_STATUS_CANCELLED
+        task["cancel_reason"] = cancel_reason
+        task["updated_at"] = _now_iso()
+        task["updated_ts"] = time.time()
+        return True
+
+    def cancel_tasks(self, identity: dict[str, object], task_ids: list[str]) -> dict[str, int]:
+        """用户取消自己的排队/进行中任务（只能取消自己的任务）。"""
+        owner = _owner_id(identity)
+        cancelled = 0
+        with self._lock:
+            changed = False
+            for task_id in task_ids:
+                task_id = _clean(task_id)
+                if not task_id:
+                    continue
+                key = _task_key(owner, task_id)
+                if self._mark_cancelled_locked(key, "user"):
+                    cancelled += 1
+                    changed = True
+            if changed:
+                self._save_locked()
+        return {"cancelled": cancelled}
+
+    def list_admin_tasks(self, identity: dict[str, object]) -> dict[str, object]:
+        """管理员查看全部任务（含 owner 信息，用于任务管理）。"""
+        with self._lock:
+            if self._cleanup_locked():
+                self._save_locked()
+            items = [
+                {**_public_task(task), "owner_id": task.get("owner_id")}
+                for task in self._tasks.values()
+            ]
+        items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        return {"items": items}
+
+    def cancel_tasks_admin(
+        self,
+        identity: dict[str, object],
+        task_ids: list[str] | None = None,
+        all_tasks: bool = False,
+    ) -> dict[str, int]:
+        """管理员批量/一键取消未完成任务（全部用户）。"""
+        requested = {_clean(task_id) for task_id in (task_ids or []) if _clean(task_id)}
+        cancelled = 0
+        with self._lock:
+            changed = False
+            for key, task in list(self._tasks.items()):
+                if task.get("status") in TERMINAL_STATUSES:
+                    continue
+                if all_tasks or (requested and str(task.get("id")) in requested):
+                    if self._mark_cancelled_locked(key, "admin"):
+                        cancelled += 1
+                        changed = True
+            if changed:
+                self._save_locked()
+        return {"cancelled": cancelled}
+
     def _submit(
         self,
         identity: dict[str, object],
@@ -274,6 +340,10 @@ class ImageTaskService:
         identity: dict[str, object],
         model: str,
     ) -> None:
+        # 任务可能在被启动前已被用户/管理员取消（排队任务取消）
+        with self._lock:
+            if self._tasks.get(key, {}).get("status") == TASK_STATUS_CANCELLED:
+                return
         started = time.time()
         # 阶段耗时记录：每个阶段开始时间戳
         phase_marks: list[dict[str, Any]] = [{"phase": PHASE_STARTING, "ts": started}]
@@ -359,6 +429,17 @@ class ImageTaskService:
                     setattr(error, "account_email", account_email)
                 raise error
             usage = result.get("usage")
+            # 任务执行期间被用户/管理员取消：丢弃结果，不扣额度
+            with self._lock:
+                if self._tasks.get(key, {}).get("status") == TASK_STATUS_CANCELLED:
+                    self._update_task(
+                        key,
+                        status=TASK_STATUS_CANCELLED,
+                        data=[],
+                        error="",
+                        duration_ms=int((time.time() - started) * 1000),
+                    )
+                    return
             duration_ms = int((time.time() - started) * 1000)
             phases = build_phases(time.time())
             self._update_task(

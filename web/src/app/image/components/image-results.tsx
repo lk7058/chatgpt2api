@@ -25,6 +25,7 @@ type ImageResultsProps = {
   onRetryImage: (conversationId: string, turnId: string, imageId: string) => void | Promise<void>;
   onTimeoutRetryContinue: (taskId: string) => void | Promise<void>;
   onDismissErrors: (conversationId: string, turnId: string) => void | Promise<void>;
+  onCancelTurn: (conversationId: string, turnId: string) => void | Promise<void>;
   formatConversationTime: (value: string) => string;
 };
 
@@ -95,6 +96,7 @@ export function ImageResults({
   onRetryImage,
   onTimeoutRetryContinue,
   onDismissErrors,
+  onCancelTurn,
   formatConversationTime,
 }: ImageResultsProps) {
   const imageDimensionsRef = useRef<Record<string, string>>({});
@@ -248,6 +250,16 @@ export function ImageResults({
                     <span className="rounded-full bg-stone-100 px-3 py-1">{getTurnStatusLabel(turn.status)}</span>
                     {turn.status === "queued" ? (
                       <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">等待当前对话中的前序任务完成</span>
+                    ) : null}
+                    {turn.status === "queued" ? (
+                      <button
+                        type="button"
+                        onClick={() => void onCancelTurn(selectedConversation.id, turn.id)}
+                        className="rounded-full bg-stone-100 px-3 py-1 text-stone-600 transition hover:bg-rose-50 hover:text-rose-600"
+                        aria-label="取消该任务"
+                      >
+                        取消
+                      </button>
                     ) : null}
                   </div>
 

@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
+  cancelImageTasks,
   createImageEditTask,
   createImageGenerationTask,
   fetchAccounts,
@@ -208,6 +209,20 @@ async function buildReferenceImageFromStoredImage(image: StoredImage, fileName: 
 }
 
 function taskDataToStoredImage(image: StoredImage, task: ImageTask): StoredImage {
+  if (task.status === "cancelled") {
+    return {
+      ...image,
+      taskId: task.id,
+      status: "error",
+      taskStatus: undefined,
+      progress: undefined,
+      error:
+        task.cancel_reason === "admin"
+          ? "该任务已被管理员取消，请稍后重试！"
+          : "您已取消该任务",
+    };
+  }
+
   if (task.status === "success") {
     const first = task.data?.[0];
     if (!first?.b64_json && !first?.url) {
@@ -1144,6 +1159,52 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     await persistConversation(nextConversation);
   };
 
+  // 用户取消排队任务：调用后端取消（未提交的任务会被忽略），本地标记「您已取消该任务」
+  const handleCancelTurn = useCallback(
+    async (conversationId: string, turnId: string) => {
+      const conversation = conversationsRef.current.find((item) => item.id === conversationId);
+      const turn = conversation?.turns.find((item) => item.id === turnId);
+      if (!conversation || !turn) {
+        return;
+      }
+      const taskIds = turn.images.filter((image) => image.taskId).map((image) => image.taskId!);
+      try {
+        if (taskIds.length > 0) {
+          await cancelImageTasks(taskIds);
+        }
+      } catch {
+        // 取消失败不阻塞本地标记
+      }
+      await updateConversation(
+        conversationId,
+        (current) => {
+          const base = current ?? conversation;
+          return {
+            ...base,
+            turns: base.turns.map((item) =>
+              item.id === turnId
+                ? {
+                    ...item,
+                    status: "error",
+                    error: "您已取消该任务",
+                    images: item.images.map((image) => ({ ...image, status: "error", error: "您已取消该任务" })),
+                  }
+                : item,
+            ),
+          };
+        },
+        { persist: false },
+      );
+      // 取消状态异步持久化（不阻塞取消响应）
+      const latest = conversationsRef.current.find((item) => item.id === conversationId);
+      if (latest) {
+        void saveImageConversation(latest);
+      }
+      toast.success("已取消该任务");
+    },
+    [updateConversation],
+  );
+
   const handleClearHistory = async () => {
     try {
       await clearImageConversations();
@@ -1938,6 +1999,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
                 onRetryImage={handleRetryImage}
                 onTimeoutRetryContinue={handleTimeoutRetryContinue}
                 onDismissErrors={handleDismissErrors}
+                onCancelTurn={handleCancelTurn}
                 formatConversationTime={formatConversationTime}
               />
             </div>

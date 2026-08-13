@@ -315,7 +315,7 @@ export type ImageResponse = {
 
 export type ImageTask = {
   id: string;
-  status: "queued" | "running" | "success" | "error";
+  status: "queued" | "running" | "success" | "error" | "cancelled";
   mode: "generate" | "edit";
   model?: ImageModel;
   size?: string;
@@ -328,6 +328,7 @@ export type ImageTask = {
   progress?: string;
   elapsed_secs?: number;
   duration_ms?: number;
+  cancel_reason?: "user" | "admin";
 };
 
 type ImageTaskListResponse = {
@@ -929,6 +930,39 @@ export async function fetchImageTasks(ids: string[]) {
   }
   params.set("_t", String(Date.now()));
   return httpRequest<ImageTaskListResponse>(`/api/image-tasks?${params.toString()}`);
+}
+
+// 用户取消自己的排队/进行中任务
+export async function cancelImageTasks(taskIds: string[]) {
+  return httpRequest<{ cancelled: number }>("/api/image-tasks/cancel", {
+    method: "POST",
+    body: { task_ids: taskIds },
+  });
+}
+
+export type AdminImageTask = {
+  id: string;
+  status: string;
+  mode: string;
+  model?: string;
+  size?: string;
+  created_at: string;
+  updated_at: string;
+  owner_id?: string;
+  cancel_reason?: string;
+  progress?: string;
+};
+
+export async function fetchAdminImageTasks() {
+  return httpRequest<{ items: AdminImageTask[] }>("/api/admin/image-tasks");
+}
+
+// 管理员批量/一键取消任务
+export async function cancelAdminImageTasks(body: { task_ids?: string[]; all_tasks?: boolean }) {
+  return httpRequest<{ cancelled: number }>("/api/admin/image-tasks/cancel", {
+    method: "POST",
+    body,
+  });
 }
 
 export async function resumeImagePoll(taskId: string, extraTimeoutSecs = 30) {
