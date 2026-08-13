@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Megaphone, X } from "lucide-react";
 
 import { fetchPublicAnnouncements } from "@/lib/api";
@@ -11,6 +11,27 @@ type BannerData = { title: string; content: string; link: string };
 
 export function AnnouncementBanner() {
   const [banner, setBanner] = useState<BannerData | null>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
+
+  // 动态测量公告栏高度写入 CSS 变量，供固定视口高度布局（如生图页）自适应，避免页面显示不全
+  useEffect(() => {
+    const setHeight = (height: number) => {
+      document.documentElement.style.setProperty("--announcement-banner-height", `${height}px`);
+    };
+    const element = bannerRef.current;
+    if (!element) {
+      setHeight(0);
+      return;
+    }
+    const update = () => setHeight(element.offsetHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      setHeight(0);
+    };
+  }, [banner]);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +71,10 @@ export function AnnouncementBanner() {
   );
 
   return (
-    <div className="relative flex items-center justify-center gap-3 rounded-xl border border-stone-200 bg-stone-100/80 py-2 pl-4 pr-10 text-xs text-stone-700 dark:border-white/10 dark:bg-stone-800/60 dark:text-stone-200">
+    <div
+      ref={bannerRef}
+      className="relative flex items-center justify-center gap-3 rounded-xl border border-stone-200 bg-stone-100/80 py-2 pl-4 pr-10 text-xs text-stone-700 dark:border-white/10 dark:bg-stone-800/60 dark:text-stone-200"
+    >
       {banner.link ? (
         <a
           href={banner.link}
