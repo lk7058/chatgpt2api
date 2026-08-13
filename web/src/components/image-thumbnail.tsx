@@ -22,10 +22,25 @@ export function getImageThumbnailUrl(src: string) {
 export function ImageThumbnail({ src, thumbnailSrc, alt = "", className, imageClassName }: ImageThumbnailProps) {
   const initialSrc = useMemo(() => thumbnailSrc || getImageThumbnailUrl(src), [src, thumbnailSrc]);
   const [currentSrc, setCurrentSrc] = useState(initialSrc);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setCurrentSrc(initialSrc);
+    setFailed(false);
   }, [initialSrc]);
+
+  if (failed) {
+    return (
+      <span
+        className={cn(
+          "flex items-center justify-center bg-stone-100 text-center text-[10px] leading-3 text-stone-400",
+          className,
+        )}
+      >
+        缓存已清理
+      </span>
+    );
+  }
 
   return (
     <span className={cn("block overflow-hidden bg-stone-100", className)}>
@@ -38,6 +53,9 @@ export function ImageThumbnail({ src, thumbnailSrc, alt = "", className, imageCl
         onError={() => {
           if (currentSrc !== src) {
             setCurrentSrc(src);
+          } else {
+            // 缩略图与原图都加载失败：缓存已被清理
+            setFailed(true);
           }
         }}
       />

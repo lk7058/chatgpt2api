@@ -1069,6 +1069,32 @@ export async function fetchImageStorage() {
   return httpRequest<ImageStorageStats>("/api/images/storage");
 }
 
+// ── 公告与广告 ─────────────────────────────────────────────
+export type PublicAnnouncement = {
+  popup: { title: string; content: string } | null;
+  banner: { title: string; content: string; link: string } | null;
+};
+
+export type AnnouncementConfig = {
+  popup: { title: string; content: string; link: string; enabled: boolean; updated_at: string };
+  banner: { title: string; content: string; link: string; enabled: boolean; updated_at: string };
+};
+
+export async function fetchPublicAnnouncements() {
+  return httpRequest<PublicAnnouncement>("/api/public-announcements");
+}
+
+export async function fetchAdminAnnouncements() {
+  return httpRequest<AnnouncementConfig>("/api/admin/announcements");
+}
+
+export async function saveAdminAnnouncements(body: {
+  popup: { title: string; content: string; link?: string; enabled: boolean };
+  banner: { title: string; content: string; link: string; enabled: boolean };
+}) {
+  return httpRequest<AnnouncementConfig>("/api/admin/announcements", { method: "POST", body });
+}
+
 export async function compressAllImages() {
   return httpRequest<{ compressed: number; saved_bytes: number; saved_mb: number }>("/api/images/storage/compress", { method: "POST" });
 }

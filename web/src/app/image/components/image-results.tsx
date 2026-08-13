@@ -524,6 +524,7 @@ const LazyImage = memo(function LazyImage({ src, alt, className, onLoad, onOpen 
   onOpen?: () => void;
 }) {
   const [isVisible, setIsVisible] = useState(false);
+  const [failed, setFailed] = useState(false);
   const imgRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -545,7 +546,7 @@ const LazyImage = memo(function LazyImage({ src, alt, className, onLoad, onOpen 
 
   return (
     <div ref={imgRef} className="relative">
-      {isVisible ? (
+      {isVisible && !failed ? (
         <button
           type="button"
           onClick={onOpen}
@@ -556,8 +557,13 @@ const LazyImage = memo(function LazyImage({ src, alt, className, onLoad, onOpen 
             alt={alt}
             className="block h-full w-full object-cover transition duration-200 group-hover:brightness-90 sm:h-auto sm:object-contain"
             onLoad={onLoad}
+            onError={() => setFailed(true)}
           />
         </button>
+      ) : isVisible && failed ? (
+        <div className="flex min-h-[200px] items-center justify-center bg-stone-100 text-center text-xs leading-4 text-stone-400 sm:min-h-[280px]">
+          缓存已清理，不可恢复
+        </div>
       ) : (
         <div className={`animate-pulse rounded-xl bg-stone-100 min-h-[200px] sm:min-h-[280px] ${className}`} />
       )}

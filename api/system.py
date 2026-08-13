@@ -5,9 +5,10 @@ from urllib.parse import quote
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.support import require_admin, require_identity, resolve_image_base_url
+from services.announcement_service import announcement_service
 from services.backup_service import BackupError, backup_service
 from services.config import config
 from services.image_service import (
@@ -46,6 +47,18 @@ class ImageDeleteRequest(BaseModel):
     start_date: str = ""
     end_date: str = ""
     all_matching: bool = False
+
+
+class AnnouncementItemRequest(BaseModel):
+    title: str = ""
+    content: str = ""
+    link: str = ""
+    enabled: bool = False
+
+
+class AnnouncementSaveRequest(BaseModel):
+    popup: AnnouncementItemRequest = Field(default_factory=AnnouncementItemRequest)
+    banner: AnnouncementItemRequest = Field(default_factory=AnnouncementItemRequest)
 
 class ImageDownloadRequest(BaseModel):
     paths: list[str]
@@ -298,6 +311,25 @@ def create_router(app_version: str) -> APIRouter:
     ):
         require_admin(authorization)
         return await run_in_threadpool(delete_to_target, target_free_mb, dry_run)
+
+    @router.get("/api/public-announcements")
+    async def get_public_announcements():
+        """公开接口：返回已启用的弹窗公告与广告栏（无需登录）。"""
+        return announcement_service.get_public()
+
+    @router.get("/api/admin/announcements")
+    async def get_announcements(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return announcement_service.get_admin()
+
+    @router.post("/api/admin/announcements")
+    async def save_announcements(body: AnnouncementSaveRequest, authorization: str | None = Header(default=None)):
+        require_admin(authorization)
+        return await run_in_threadpool(
+            announcement_service.save,
+            body.popup.model_dump(),
+            body.banner.model_dump(),
+        )
 
     @router.get("/health", response_model=None)
     async def health_dashboard(format: str = Query(default="html"), authorization: str | None = Header(default=None)):
