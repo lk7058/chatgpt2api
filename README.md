@@ -1,5 +1,10 @@
 <h1 align="center">ChatGPT2API</h1>
 
+<p align="center">
+📮 Bug 反馈邮箱：<a href="mailto:l@w.cx">l@w.cx</a>
+</p>
+
+
 <p align="center">基于 <a href="https://github.com/basketikun/chatgpt2api">basketikun/chatgpt2api</a> 二次开发的 ChatGPT 账号池代理服务，提供 OpenAI 兼容的图片生成/编辑 API，并内置邮箱账号体系、签到奖励、额度系统与 Web 管理面板。</p>
 
 > [!NOTE]
