@@ -29,7 +29,7 @@ export function AnnouncementBanner() {
         }
         setBanner(data.banner);
       } catch {
-        // 广告加载失败不打扰用户
+        // 公告加载失败不打扰用户
       }
     })();
     return () => {
