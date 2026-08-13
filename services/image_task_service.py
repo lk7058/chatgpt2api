@@ -317,6 +317,8 @@ class ImageTaskService:
             third_party = third_party_route_for_model(model)
             if third_party is not None:
                 try:
+                    # 第三方生成中
+                    progress_callback("starting_generation")
                     if mode == "edit":
                         result = third_party_image_edit(third_party, payload_with_progress)
                     else:
@@ -331,8 +333,9 @@ class ImageTaskService:
                 result = handler(payload_with_progress)
             if not isinstance(result, dict):
                 raise RuntimeError("image task returned streaming result unexpectedly")
-            # 第三方图片镜像到本地：下载后替换 url 为本地地址（失败则任务报错，不外露第三方 URL）
+            # 第三方图片镜像到本地：先进入"正在拉取图片"阶段，下载完成或失败均结束
             if third_party is not None:
+                progress_callback("receiving_image")
                 try:
                     from services.third_party_image_download import mirror_result_images
 
