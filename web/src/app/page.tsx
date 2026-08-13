@@ -68,7 +68,8 @@ function formatTime(value: string) {
   }).format(date);
 }
 
-// 只保留服务器上仍存在的图片（已清理/删除的过滤掉），分批并发 HEAD 探测
+// 只保留服务器上仍存在的图片（已清理/删除的过滤掉），分批并发探测。
+// 用 Range 请求只取 1 字节：存在返回 206、不存在返回 404（HEAD 请求会落到静态站点返回 200，不可用）。
 async function filterExistingImages(items: HistoryImage[]): Promise<HistoryImage[]> {
   const CHUNK_SIZE = 20;
   const existing: HistoryImage[] = [];
@@ -76,8 +77,12 @@ async function filterExistingImages(items: HistoryImage[]): Promise<HistoryImage
     const chunk = items.slice(offset, offset + CHUNK_SIZE);
     const statuses = await Promise.all(
       chunk.map((item) =>
-        fetch(item.url, { method: "HEAD", cache: "no-store" })
-          .then((response) => response.ok)
+        fetch(item.url, {
+          method: "GET",
+          headers: { Range: "bytes=0-0" },
+          cache: "no-store",
+        })
+          .then((response) => response.status === 206 || response.ok)
           .catch(() => false),
       ),
     );
