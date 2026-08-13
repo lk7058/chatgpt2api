@@ -38,6 +38,24 @@ def _strip_heavy_payload(obj: Any) -> Any:
     return obj
 
 
+def _strip_result_b64(obj: Any) -> Any:
+    """单条记录拉取：仅剥离结果图 b64_json（展示用 url），保留参考图 dataUrl。
+
+    跨环境补齐参考图时使用：列表接口为了轻量会把超大 dataUrl 剥成占位，
+    用户选中会话后再通过本函数从服务器存储取回完整参考图。
+    """
+    if isinstance(obj, dict):
+        out: dict[str, Any] = {}
+        for key, value in obj.items():
+            if key == "b64_json" and isinstance(value, str) and value:
+                continue
+            out[key] = _strip_result_b64(value)
+        return out
+    if isinstance(obj, list):
+        return [_strip_result_b64(item) for item in obj]
+    return obj
+
+
 class RecordUpsertRequest(BaseModel):
     id: str = ""
     kind: str = "image"
@@ -74,6 +92,15 @@ def create_router() -> APIRouter:
         record["payload"] = body.payload
         item = generation_record_service.upsert_record(user_id, record)
         return {"item": item}
+
+    @router.get("/api/records/{record_id}")
+    async def get_record(record_id: str, authorization: str | None = Header(default=None)):
+        user_id = _user_id(authorization)
+        item = generation_record_service.get_record(user_id, record_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail={"error": "记录不存在"})
+        # 单条拉取用于补齐参考图：仅剥离结果图 b64_json，保留参考图 dataUrl
+        return {"item": _strip_result_b64(item)}
 
     @router.delete("/api/records/{record_id}")
     async def delete_record(record_id: str, authorization: str | None = Header(default=None)):

@@ -208,31 +208,37 @@ export function ImageResults({
                     <div className="mb-4 flex flex-col items-end">
                       <div className="mb-3 text-xs font-medium text-stone-500">本轮参考图</div>
                       <div className="flex flex-wrap justify-end gap-3">
-                        {turn.referenceImages.map((image, index) => (
-                          <div key={`${turn.id}-${image.name}-${index}`} className="flex flex-col items-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => onOpenLightbox(referenceLightboxImages, index)}
-                              className="group relative h-24 w-24 overflow-hidden border border-stone-200/80 bg-stone-100/60 text-left transition hover:border-stone-300"
-                              aria-label={`预览参考图 ${image.name || index + 1}`}
-                            >
-                              <img
-                                src={image.dataUrl}
-                                alt={image.name || `参考图 ${index + 1}`}
-                                className="absolute inset-0 h-full w-full object-cover transition duration-200 group-hover:scale-[1.02]"
-                              />
-                            </button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="rounded-full border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
-                              onClick={() => onContinueEdit(selectedConversation.id, image)}
-                            >
-                              <Sparkles className="size-4" />
-                              加入编辑
-                            </Button>
-                          </div>
-                        ))}
+                        {turn.referenceImages.map((image, index) => {
+                          if (!image.dataUrl) {
+                            // 跨环境时列表接口剥离了参考图 dataUrl（占位），选中会话后会自动补齐，此处先隐藏
+                            return null;
+                          }
+                          return (
+                            <div key={`${turn.id}-${image.name}-${index}`} className="flex flex-col items-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => onOpenLightbox(referenceLightboxImages, index)}
+                                className="group relative h-24 w-24 overflow-hidden border border-stone-200/80 bg-stone-100/60 text-left transition hover:border-stone-300"
+                                aria-label={`预览参考图 ${image.name || index + 1}`}
+                              >
+                                <img
+                                  src={image.dataUrl}
+                                  alt={image.name || `参考图 ${index + 1}`}
+                                  className="absolute inset-0 h-full w-full object-cover transition duration-200 group-hover:scale-[1.02]"
+                                />
+                              </button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full border-stone-200 bg-white text-stone-700 hover:bg-stone-50"
+                                onClick={() => onContinueEdit(selectedConversation.id, image)}
+                              >
+                                <Sparkles className="size-4" />
+                                加入编辑
+                              </Button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : null}

@@ -6,6 +6,7 @@ import type { ImageModel } from "@/lib/api";
 import {
   clearGenerationRecords,
   deleteGenerationRecord,
+  fetchGenerationRecord,
   fetchGenerationRecords,
   upsertGenerationRecord,
 } from "@/lib/api";
@@ -77,20 +78,14 @@ const imageConversationStorage = localforage.createInstance({
 const IMAGE_CONVERSATIONS_KEY = "items";
 let imageConversationWriteQueue: Promise<void> = Promise.resolve();
 
-// 与后端列表接口一致：超过该长度的 dataUrl 视为重负载，云同步时剥离
-const HEAVY_SYNC_BASE64_LEN = 50_000;
-
-// 上传服务端前剥离重负载：结果图 b64_json（裸 base64，可达数 MB）与超大参考图 dataUrl
-// 只在本机使用；服务端记录保留 url/元数据即可，跨设备展示与编辑会回源 url 重建。
+// 上传服务端前剥离重负载：结果图 b64_json（裸 base64，可达数 MB）只在本机使用；
+// 参考图 dataUrl 必须完整保留（服务器存储），否则换环境后无法按需补齐参考图。
 function stripHeavyPayloadForSync(conversation: ImageConversation): ImageConversation {
   return {
     ...conversation,
     turns: conversation.turns.map((turn) => ({
       ...turn,
       images: turn.images.map(({ b64_json: _b64, ...rest }) => rest),
-      referenceImages: turn.referenceImages.map((image) =>
-        image.dataUrl.length > HEAVY_SYNC_BASE64_LEN ? { ...image, dataUrl: "" } : image,
-      ),
     })),
   };
 }
@@ -120,7 +115,9 @@ function normalizeReferenceImage(image: StoredReferenceImage): StoredReferenceIm
   return {
     name: image.name || "reference.png",
     type: image.type || "image/png",
-    dataUrl: image.dataUrl,
+    // 服务端列表接口会剥离超大 dataUrl 成占位（仅保留 name/type），
+    // 选中会话时再按需拉取完整记录补齐，因此这里允许空串占位
+    dataUrl: typeof image.dataUrl === "string" ? image.dataUrl : "",
   };
 }
 
@@ -137,7 +134,8 @@ function getLegacyReferenceImages(source: Record<string, unknown>): StoredRefere
           return false;
         }
         const candidate = image as StoredReferenceImage;
-        return typeof candidate.dataUrl === "string" && candidate.dataUrl.length > 0;
+        // 保留占位：dataUrl 可能被列表接口剥离成空串，仅剩 name/type，选中会话后再补齐
+        return typeof candidate.name === "string" && candidate.name.length > 0;
       })
       .map(normalizeReferenceImage);
   }
@@ -337,7 +335,7 @@ function mergeSyncedConversations(synced: ImageConversation[], local: ImageConve
       merged.set(conversation.id, conversation);
       continue;
     }
-    // 服务端版本较新但缺 b64_json：把本地对应的 b64_json 补回去
+    // 服务端版本较新但缺 b64_json / 参考图 dataUrl：把本地对应的数据补回去
     const localTurns = new Map(conversation.turns.map((turn) => [turn.id, turn]));
     const turns = latest.turns.map((turn) => {
       const localTurn = localTurns.get(turn.id);
@@ -349,7 +347,11 @@ function mergeSyncedConversations(synced: ImageConversation[], local: ImageConve
         const localImage = localImages.get(image.id);
         return localImage?.b64_json && !image.b64_json ? { ...image, b64_json: localImage.b64_json } : image;
       });
-      return { ...turn, images };
+      const referenceImages = turn.referenceImages.map((ref, index) => {
+        const localRef = localTurn.referenceImages[index];
+        return localRef?.dataUrl && !ref.dataUrl ? { ...ref, dataUrl: localRef.dataUrl } : ref;
+      });
+      return { ...turn, images, referenceImages };
     });
     merged.set(conversation.id, { ...latest, turns });
   }
@@ -367,6 +369,19 @@ export async function syncImageConversationsFromServer(): Promise<ImageConversat
   const result = mergeSyncedConversations(synced, local);
   void imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, result);
   return result;
+}
+
+// 按需拉取单条会话的完整记录（含参考图 dataUrl，列表接口剥离后需要时补齐）
+export async function fetchImageConversation(conversationId: string): Promise<ImageConversation | null> {
+  try {
+    const data = await fetchGenerationRecord(conversationId);
+    if (!data.item || data.item.kind !== "image" || !data.item.payload) {
+      return null;
+    }
+    return normalizeConversation(data.item.payload as ImageConversation & Record<string, unknown>);
+  } catch {
+    return null;
+  }
 }
 
 export async function listImageConversations(): Promise<ImageConversation[]> {
@@ -400,6 +415,36 @@ export async function saveImageConversation(conversation: ImageConversation): Pr
     ]);
     await imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, nextItems);
     await syncPushConversations([persistedConversation]);
+  });
+}
+
+// 仅把按需拉取补齐的参考图 dataUrl 写回本地缓存（不推送服务器），
+// 保留缓存里已有的 b64_json 等完整数据，供同环境后续秒开使用。
+export async function cacheImageConversationLocally(conversation: ImageConversation): Promise<void> {
+  await queueImageConversationWrite(async () => {
+    const items = await readStoredImageConversations();
+    const enriched = normalizeConversation(conversation);
+    const current = items.find((item) => item.id === enriched.id);
+    if (!current) {
+      const nextItems = sortImageConversations([enriched, ...items]);
+      await imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, nextItems);
+      return;
+    }
+    const enrichedTurns = new Map(enriched.turns.map((turn) => [turn.id, turn]));
+    const turns = current.turns.map((turn) => {
+      const enrichedTurn = enrichedTurns.get(turn.id);
+      if (!enrichedTurn) {
+        return turn;
+      }
+      const referenceImages = turn.referenceImages.map((ref, index) => {
+        const enrichedRef = enrichedTurn.referenceImages[index];
+        return !ref.dataUrl && enrichedRef?.dataUrl ? { ...ref, dataUrl: enrichedRef.dataUrl } : ref;
+      });
+      return { ...turn, referenceImages };
+    });
+    const merged = { ...current, turns };
+    const nextItems = sortImageConversations([merged, ...items.filter((item) => item.id !== merged.id)]);
+    await imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, nextItems);
   });
 }
 

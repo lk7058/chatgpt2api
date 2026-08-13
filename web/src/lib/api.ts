@@ -701,6 +701,11 @@ export async function fetchGenerationRecords(limit = 200) {
   return httpRequest<{ items: GenerationRecord[] }>(`/api/records?limit=${limit}`);
 }
 
+// 拉取单条完整记录（保留参考图 dataUrl，跨环境补齐参考图时使用）
+export async function fetchGenerationRecord(recordId: string) {
+  return httpRequest<{ item: GenerationRecord }>(`/api/records/${encodeURIComponent(recordId)}`);
+}
+
 export async function upsertGenerationRecord(record: {
   id?: string;
   kind?: string;

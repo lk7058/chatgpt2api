@@ -33,8 +33,10 @@ import {
 import { useAuthGuard } from "@/lib/use-auth-guard";
 import { useSettingsStore } from "@/app/settings/store";
 import {
+  cacheImageConversationLocally,
   clearImageConversations,
   deleteImageConversation,
+  fetchImageConversation,
   getImageConversationStats,
   listImageConversations,
   readLocalImageConversations,
@@ -451,6 +453,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   const didLoadQuotaRef = useRef(false);
   const conversationsRef = useRef<ImageConversation[]>([]);
   const selectedConversationIdRef = useRef<string | null>(null);
+  const referenceFetchingRef = useRef<Set<string>>(new Set());
   const loadCancelledRef = useRef(false);
   const resultsViewportRef = useRef<HTMLDivElement>(null);
   const lastConversationIdRef = useRef<string | null>(null);
@@ -541,6 +544,65 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   useEffect(() => {
     selectedConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId]);
+
+  // 跨环境/缓存缺失时：列表接口会剥离参考图 dataUrl（只剩 name/type 占位），
+  // 选中会话后按需拉取该会话的完整记录，把参考图补齐并写回本地缓存。
+  useEffect(() => {
+    const conversationId = selectedConversation?.id;
+    if (!conversationId || !selectedConversation) {
+      return;
+    }
+    const hasMissingReference = selectedConversation.turns.some(
+      (turn) => !turn.resultsDeleted && turn.referenceImages.some((image) => !image.dataUrl),
+    );
+    if (!hasMissingReference || referenceFetchingRef.current.has(conversationId)) {
+      return;
+    }
+    referenceFetchingRef.current.add(conversationId);
+    void (async () => {
+      try {
+        const full = await fetchImageConversation(conversationId);
+        if (!full || loadCancelledRef.current) {
+          return;
+        }
+        const fullTurns = new Map(full.turns.map((turn) => [turn.id, turn]));
+        const nextItems = conversationsRef.current.map((conversation) => {
+          if (conversation.id !== conversationId) {
+            return conversation;
+          }
+          const turns = conversation.turns.map((turn) => {
+            const fullTurn = fullTurns.get(turn.id);
+            if (!fullTurn) {
+              return turn;
+            }
+            const hasMissing = turn.referenceImages.some((image) => !image.dataUrl);
+            if (!hasMissing) {
+              return turn;
+            }
+            const referenceImages = turn.referenceImages.map((image, index) => {
+              const fullImage = fullTurn.referenceImages[index];
+              return !image.dataUrl && fullImage?.dataUrl ? { ...image, dataUrl: fullImage.dataUrl } : image;
+            });
+            return { ...turn, referenceImages };
+          });
+          return { ...conversation, turns };
+        });
+        if (loadCancelledRef.current) {
+          return;
+        }
+        conversationsRef.current = nextItems;
+        setConversations(nextItems);
+        const enriched = nextItems.find((conversation) => conversation.id === conversationId);
+        if (enriched) {
+          void cacheImageConversationLocally(enriched);
+        }
+      } catch {
+        // 补齐失败：保留占位，重新选中会话时会再次尝试
+      } finally {
+        referenceFetchingRef.current.delete(conversationId);
+      }
+    })();
+  }, [selectedConversation, setConversations]);
 
   const scrollResultsToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
     const element = resultsViewportRef.current;
@@ -1188,10 +1250,12 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       try {
         const nextReference =
           "dataUrl" in image
-            ? {
-                referenceImage: image,
-                file: dataUrlToFile(image.dataUrl, image.name, image.type),
-              }
+            ? image.dataUrl
+              ? {
+                  referenceImage: image,
+                  file: dataUrlToFile(image.dataUrl, image.name, image.type),
+                }
+              : null
             : await buildReferenceImageFromStoredImage(image, `conversation-${conversationId}-${Date.now()}.png`);
         if (!nextReference) {
           return;
@@ -1216,6 +1280,10 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     const conversation = conversationsRef.current.find((item) => item.id === conversationId);
     const turn = conversation?.turns.find((item) => item.id === turnId);
     if (!conversation || !turn || !turn.prompt.trim()) {
+      return;
+    }
+    if (turn.referenceImages.some((image) => !image.dataUrl)) {
+      toast.error("参考图正在同步中，请稍后重试");
       return;
     }
 
