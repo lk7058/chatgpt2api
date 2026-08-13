@@ -189,6 +189,13 @@ export function TopNav() {
   const navItems = session.role === "admin" ? adminNavItems : userNavItems;
   const roleLabel = session.role === "admin" ? "管理员" : "普通用户";
   const displayName = session.name.trim() || roleLabel;
+  // trailingSlash 模式下子页面 pathname 带尾部斜杠（/image/），兼容匹配保证高亮
+  const isNavActive = (href: string) => {
+    if (href === "/") {
+      return pathname === "/";
+    }
+    return pathname === href || pathname === `${href}/`;
+  };
   const baseUrl = webConfig.apiUrl.replace(/\/$/, "") || window.location.origin;
   const canvas = thirdPartyApps?.infinite_canvas;
   const canvasHref = canvas?.enabled && canvas.url.trim() ? buildThirdPartyHref(canvas.url, baseUrl, session.key) : "";
@@ -236,7 +243,7 @@ export function TopNav() {
                     </SheetClose>
                   ) : null}
                   {navItems.map((item) => {
-                    const active = pathname === item.href;
+                    const active = isNavActive(item.href);
                     const className = cn(
                       "flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition",
                       active ? "bg-stone-950 text-white dark:bg-white dark:text-stone-950" : "text-stone-600 hover:bg-stone-100 hover:text-stone-950 dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white",
@@ -278,7 +285,7 @@ export function TopNav() {
               </button>
             ) : null}
             {navItems.map((item) => {
-              const active = pathname === item.href;
+              const active = isNavActive(item.href);
               return (
                 <Link
                   key={item.href}
