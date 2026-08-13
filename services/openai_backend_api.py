@@ -910,8 +910,9 @@ class OpenAIBackendAPI:
         payload = image.split(",", 1)[1] if image.startswith("data:") and "," in image else image
         return base64.b64decode(payload)
 
-    def _upload_image(self, image: str, file_name: str = "image.png") -> Dict[str, Any]:
-        """上传一张 base64 图片，返回底层文件元数据。"""
+    def _upload_image(self, image: str, file_name: str = "image.png", session: Any = None) -> Dict[str, Any]:
+        """上传一张 base64 图片，返回底层文件元数据。可传入独立 Session 以支持并发。"""
+        session = session or self.session
         data = self._decode_image_base64(image)
         if (
                 image
@@ -927,7 +928,7 @@ class OpenAIBackendAPI:
         width, height = image.size
         mime_type = Image.MIME.get(image.format, "image/png")
         path = "/backend-api/files"
-        response = self.session.post(
+        response = session.post(
             self.base_url + path,
             headers=self._headers(path, {"Content-Type": "application/json", "Accept": "application/json"}),
             json={"file_name": file_name, "file_size": len(data), "use_case": "multimodal", "width": width,
@@ -936,7 +937,7 @@ class OpenAIBackendAPI:
         )
         ensure_ok(response, path)
         upload_meta = response.json()
-        response = self.session.put(
+        response = session.put(
             upload_meta["upload_url"],
             headers={
                 "Content-Type": mime_type,
@@ -953,7 +954,7 @@ class OpenAIBackendAPI:
         )
         ensure_ok(response, "image_upload")
         path = f"/backend-api/files/{upload_meta['file_id']}/uploaded"
-        response = self.session.post(
+        response = session.post(
             self.base_url + path,
             headers=self._headers(path, {"Content-Type": "application/json", "Accept": "application/json"}),
             data="{}",
@@ -968,6 +969,32 @@ class OpenAIBackendAPI:
             "width": width,
             "height": height,
         }
+
+    def _upload_images_concurrently(self, images: list[str]) -> list[Dict[str, Any]]:
+        """并发上传多张参考图（每线程独立 Session 并复制 Cookie），显著缩短启动阶段耗时。"""
+        if len(images) <= 1:
+            return [
+                self._upload_image(images[0], "image_1.png")
+                for _ in range(len(images))
+            ] if images else []
+        from concurrent.futures import ThreadPoolExecutor
+
+        from curl_cffi import requests as cffi_requests
+
+        def _upload_one(pair: tuple[int, str]) -> Dict[str, Any]:
+            idx, image = pair
+            session = cffi_requests.Session()
+            try:
+                try:
+                    session.cookies.update(self.session.cookies)
+                except Exception:
+                    pass
+                return self._upload_image(image, f"image_{idx}.png", session=session)
+            finally:
+                session.close()
+
+        with ThreadPoolExecutor(max_workers=min(4, len(images))) as pool:
+            return list(pool.map(_upload_one, enumerate(images, start=1)))
 
     def _start_image_generation(self, prompt: str, requirements: ChatRequirements, conduit_token: str, model: str,
                                 references: Optional[list[Dict[str, Any]]] = None) -> requests.Response:
@@ -2625,7 +2652,7 @@ class OpenAIBackendAPI:
         if not self.access_token:
             raise RuntimeError("access_token is required for image endpoints")
         self._report_progress("uploading")
-        references = [self._upload_image(image, f"image_{idx}.png") for idx, image in enumerate(images, start=1)]
+        references = self._upload_images_concurrently(images)
         self._report_progress("bootstrapping")
         self._bootstrap()
         self._report_progress("getting_token")

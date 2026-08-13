@@ -84,6 +84,8 @@ def _public_task(task: dict[str, Any]) -> dict[str, Any]:
         item["progress"] = task.get("progress")
     if task.get("progress_step"):
         item["progress_step"] = task.get("progress_step")
+    if task.get("phases"):
+        item["phases"] = task.get("phases")
     if task.get("duration_ms") is not None:
         item["duration_ms"] = task.get("duration_ms")
     if task.get("status") in (TASK_STATUS_RUNNING, TASK_STATUS_QUEUED):
@@ -273,6 +275,8 @@ class ImageTaskService:
         model: str,
     ) -> None:
         started = time.time()
+        # 阶段耗时记录：每个阶段开始时间戳
+        phase_marks: list[dict[str, Any]] = [{"phase": PHASE_STARTING, "ts": started}]
         self._update_task(
             key,
             status=TASK_STATUS_RUNNING,
@@ -284,9 +288,22 @@ class ImageTaskService:
         # 创建进度回调，每个步骤完成后更新任务状态
         def progress_callback(step: str) -> None:
             phase = STEP_TO_PHASE.get(step, PHASE_GENERATING)
+            now = time.time()
             if step == "image_stream_resolve_start":
-                self._update_task(key, started_ts=time.time())
+                self._update_task(key, started_ts=now)
+            if phase_marks[-1]["phase"] != phase:
+                phase_marks.append({"phase": phase, "ts": now})
             self._update_task(key, progress=phase, progress_step=step)
+
+        def build_phases(end_ts: float) -> list[dict[str, Any]]:
+            result: list[dict[str, Any]] = []
+            for index, mark in enumerate(phase_marks):
+                end = phase_marks[index + 1]["ts"] if index + 1 < len(phase_marks) else end_ts
+                result.append({
+                    "phase": mark["phase"],
+                    "duration_ms": max(0, int((end - mark["ts"]) * 1000)),
+                })
+            return result
         # 将进度回调添加到 payload 中（handler 会提取并传递给 ConversationRequest）
         payload_with_progress = {**payload, "progress_callback": progress_callback}
         try:
@@ -340,6 +357,7 @@ class ImageTaskService:
                 raise error
             usage = result.get("usage")
             duration_ms = int((time.time() - started) * 1000)
+            phases = build_phases(time.time())
             self._update_task(
                 key,
                 status=TASK_STATUS_SUCCESS,
@@ -349,6 +367,7 @@ class ImageTaskService:
                 duration_ms=duration_ms,
                 progress=PHASE_DONE,
                 progress_step="done",
+                phases=phases,
             )
             # 任务成功：扣减用户额度（管理员/无绑定用户跳过）
             try:
@@ -370,6 +389,7 @@ class ImageTaskService:
                 request_preview=request_text(payload.get("prompt")),
                 urls=_collect_image_urls(data),
                 account_email=account_email,
+                phases=phases,
             )
         except Exception as exc:
             error_message = str(exc) or "image task failed"
@@ -381,6 +401,7 @@ class ImageTaskService:
             log_error = _clean(getattr(exc, "original_error", "")) or error_message
             self._update_task(key, status=TASK_STATUS_ERROR, error=task_error, data=[],
                               duration_ms=duration_ms,
+                              phases=build_phases(time.time()),
                               **({"conversation_id": conversation_id} if conversation_id else {}))
             self._log_call(
                 identity,
@@ -392,6 +413,7 @@ class ImageTaskService:
                 status="failed",
                 error=log_error,
                 account_email=account_email,
+                phases=build_phases(time.time()),
             )
 
     def _log_call(
@@ -407,6 +429,7 @@ class ImageTaskService:
         error: str = "",
         urls: list[str] | None = None,
         account_email: str = "",
+        phases: list[dict[str, Any]] | None = None,
     ) -> None:
         endpoint = "/v1/images/edits" if mode == "edit" else "/v1/images/generations"
         summary_prefix = "图生图" if mode == "edit" else "文生图"
@@ -421,6 +444,8 @@ class ImageTaskService:
             "duration_ms": int((time.time() - started) * 1000),
             "status": status,
         }
+        if phases:
+            detail["phases"] = phases
         if request_preview:
             detail["request_text"] = request_preview
         if error:

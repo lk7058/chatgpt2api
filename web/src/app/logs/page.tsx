@@ -43,6 +43,12 @@ function formatDuration(item: SystemLog) {
   return typeof value === "number" ? `${(value / 1000).toFixed(2)} s` : "-";
 }
 
+function formatPhaseMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "-";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 function getUrls(item: SystemLog | null) {
   const urls = item?.detail?.urls;
   return Array.isArray(urls) ? urls.filter((url): url is string => typeof url === "string") : [];
@@ -296,6 +302,43 @@ function LogsContent() {
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-6 py-5">
             <div className="space-y-4">
+              {(() => {
+                const phases = Array.isArray(detailLog?.detail?.phases) ? (detailLog.detail.phases as Array<{ phase: string; duration_ms?: number }>) : [];
+                if (phases.length === 0) return null;
+                const phaseLabels: Record<string, string> = {
+                  queued: "排队中",
+                  starting: "启动中",
+                  generating: "生成中",
+                  downloading: "正在拉取图片",
+                  done: "完成",
+                };
+                const totalMs = phases.reduce((sum, item) => sum + (Number(item.duration_ms) || 0), 0);
+                return (
+                  <div className="rounded-xl border border-stone-200 bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between text-sm">
+                      <span className="font-medium text-stone-700">阶段耗时</span>
+                      <span className="text-xs text-stone-400">总计 {formatPhaseMs(totalMs)}</span>
+                    </div>
+                    <div className="space-y-3">
+                      {phases.map((item, index) => {
+                        const ms = Number(item.duration_ms) || 0;
+                        const percent = totalMs > 0 ? Math.max(1, Math.round((ms / totalMs) * 100)) : 0;
+                        return (
+                          <div key={`${item.phase}-${index}`}>
+                            <div className="mb-1 flex items-center justify-between text-xs">
+                              <span className="font-medium text-stone-600">{phaseLabels[item.phase] || item.phase}</span>
+                              <span className="text-stone-400">{formatPhaseMs(ms)}</span>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                              <div className="h-full rounded-full bg-stone-700 transition-all" style={{ width: `${percent}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-600 md:grid-cols-2">
                 {Object.entries(detailLog?.detail || {})
                   .filter(([key, value]) => key !== "urls" && typeof value !== "object")
