@@ -68,6 +68,28 @@ function formatTime(value: string) {
   }).format(date);
 }
 
+// 只保留服务器上仍存在的图片（已清理/删除的过滤掉），分批并发 HEAD 探测
+async function filterExistingImages(items: HistoryImage[]): Promise<HistoryImage[]> {
+  const CHUNK_SIZE = 20;
+  const existing: HistoryImage[] = [];
+  for (let offset = 0; offset < items.length; offset += CHUNK_SIZE) {
+    const chunk = items.slice(offset, offset + CHUNK_SIZE);
+    const statuses = await Promise.all(
+      chunk.map((item) =>
+        fetch(item.url, { method: "HEAD", cache: "no-store" })
+          .then((response) => response.ok)
+          .catch(() => false),
+      ),
+    );
+    chunk.forEach((item, index) => {
+      if (statuses[index]) {
+        existing.push(item);
+      }
+    });
+  }
+  return existing;
+}
+
 function ClearedPlaceholder() {
   return (
     <div className="flex h-full min-h-[120px] w-full items-center justify-center bg-stone-100 px-2 text-center text-[11px] leading-4 text-stone-400">
@@ -100,7 +122,10 @@ function HomePageContent() {
       }
       try {
         const data = await fetchGenerationRecords(500);
-        setHistory(extractHistoryImages(data.items));
+        const extracted = extractHistoryImages(data.items);
+        // 只展示服务器上仍存在的图片（已清理/删除的不展示）
+        const existing = await filterExistingImages(extracted);
+        setHistory(existing);
       } catch {
         // 历史图片加载失败不阻塞页面
       } finally {
