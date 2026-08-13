@@ -456,14 +456,20 @@ function getTurnStatusLabel(status: ImageTurnStatus) {
 }
 
 const PROGRESS_LABELS: Record<string, string> = {
-  getting_account: "确认可用账号",
-  uploading: "上传图片",
-  bootstrapping: "预热首页",
-  getting_token: "获取 token",
-  preparing_conversation: "准备会话",
-  starting_generation: "启动生成",
+  queued: "排队中",
+  starting: "启动中",
   generating: "生成中",
-  receiving_image: "接收图片中",
+  downloading: "正在拉取图片",
+  done: "完成",
+  // 兼容旧版细粒度进度步骤
+  getting_account: "启动中",
+  uploading: "启动中",
+  bootstrapping: "启动中",
+  getting_token: "启动中",
+  preparing_conversation: "启动中",
+  image_stream_resolve_start: "启动中",
+  starting_generation: "生成中",
+  receiving_image: "正在拉取图片",
 };
 
 function getProgressLabel(progress?: string) {

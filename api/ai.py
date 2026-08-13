@@ -184,7 +184,7 @@ def create_router() -> APIRouter:
                     raise
                 except Exception as exc:
                     print(f"[ai] mirror images failed: {exc}")
-                    raise HTTPException(status_code=502, detail={"error": "图片保存到本地失败，请稍后重试。"}) from exc
+                    raise HTTPException(status_code=502, detail={"error": "抱歉，出现了错误，这不是你的问题，也不是我的问题，请稍后再试！"}) from exc
                 deduct_quota(identity, weight)
                 call.log("第三方 API 图片生成完成", result)
                 return result
@@ -192,7 +192,7 @@ def create_router() -> APIRouter:
                 raise
             except Exception as exc:
                 call.log("第三方 API 图片生成失败", status="failed", error=str(exc))
-                raise HTTPException(status_code=502, detail={"error": "生成失败，请稍后再试。"}) from exc
+                raise HTTPException(status_code=502, detail={"error": "抱歉，出现了错误，这不是你的问题，也不是我的问题，请稍后再试！"}) from exc
 
         response = await call.run(openai_v1_image_generations.handle, payload)
         if isinstance(response, StreamingResponse):
@@ -246,7 +246,7 @@ def create_router() -> APIRouter:
                     raise
                 except Exception as exc:
                     print(f"[ai] mirror edit images failed: {exc}")
-                    raise HTTPException(status_code=502, detail={"error": "图片保存到本地失败，请稍后重试。"}) from exc
+                    raise HTTPException(status_code=502, detail={"error": "抱歉，出现了错误，这不是你的问题，也不是我的问题，请稍后再试！"}) from exc
                 deduct_quota(identity, weight)
                 call.log("第三方 API 图生图完成", result)
                 return result
@@ -254,7 +254,7 @@ def create_router() -> APIRouter:
                 raise
             except Exception as exc:
                 call.log("第三方 API 图生图失败", status="failed", error=str(exc))
-                raise HTTPException(status_code=502, detail={"error": "生成失败，请稍后再试。"}) from exc
+                raise HTTPException(status_code=502, detail={"error": "抱歉，出现了错误，这不是你的问题，也不是我的问题，请稍后再试！"}) from exc
 
         response = await call.run(openai_v1_image_edit.handle, payload)
         if isinstance(response, StreamingResponse):

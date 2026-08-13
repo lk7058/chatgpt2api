@@ -2547,13 +2547,34 @@ class OpenAIBackendAPI:
         return self._resolve_image_urls(conversation_id, file_ids, sediment_ids)
 
     def download_image_bytes(self, urls: list[str]) -> list[bytes]:
-        images = []
-        for url in urls:
-            response = self.session.get(url, timeout=120)
-            ensure_ok(response, "image_download")
-            if response.content not in images:
-                images.append(response.content)
-        return images
+        """并发下载图片（多图时显著提速），保持原顺序去重。"""
+        if not urls:
+            return []
+        from concurrent.futures import ThreadPoolExecutor
+
+        from curl_cffi import requests as cffi_requests
+
+        def _fetch(url: str) -> bytes:
+            # curl_cffi Session 非线程安全：每线程独立 Session 并复制 Cookie（保留登录态）
+            session = cffi_requests.Session()
+            try:
+                try:
+                    session.cookies.update(self.session.cookies)
+                except Exception:
+                    pass
+                response = session.get(url, timeout=120)
+                ensure_ok(response, "image_download")
+                return response.content
+            finally:
+                session.close()
+
+        with ThreadPoolExecutor(max_workers=min(4, len(urls))) as pool:
+            contents = list(pool.map(_fetch, urls))
+        seen: list[bytes] = []
+        for content in contents:
+            if content not in seen:
+                seen.append(content)
+        return seen
 
     def stream_conversation(
             self,

@@ -82,11 +82,13 @@ def _public_task(task: dict[str, Any]) -> dict[str, Any]:
         item["error"] = task.get("error")
     if task.get("progress"):
         item["progress"] = task.get("progress")
+    if task.get("progress_step"):
+        item["progress_step"] = task.get("progress_step")
     if task.get("duration_ms") is not None:
         item["duration_ms"] = task.get("duration_ms")
     if task.get("status") in (TASK_STATUS_RUNNING, TASK_STATUS_QUEUED):
         if task.get("status") == TASK_STATUS_RUNNING:
-            # RUNNING 状态仅在 started_ts 被设置后（image_stream_resolve_start）才计时
+            # RUNNING 状态从任务开始执行（started_ts）计时
             base_ts = task.get("started_ts")
         else:
             # QUEUED 状态从 created_ts 开始计时（排队等待中）
@@ -94,6 +96,27 @@ def _public_task(task: dict[str, Any]) -> dict[str, Any]:
         if base_ts:
             item["elapsed_secs"] = round(time.time() - base_ts, 1)
     return item
+
+
+# ── 生图四阶段 ─────────────────────────────────────────────
+PHASE_QUEUED = "queued"          # 排队中
+PHASE_STARTING = "starting"      # 启动中
+PHASE_GENERATING = "generating"  # 生成中
+PHASE_DOWNLOADING = "downloading"  # 正在拉取图片
+PHASE_DONE = "done"              # 完成
+
+# 细粒度进度步骤 → 四阶段映射
+STEP_TO_PHASE: dict[str, str] = {
+    "getting_account": PHASE_STARTING,
+    "uploading": PHASE_STARTING,
+    "bootstrapping": PHASE_STARTING,
+    "getting_token": PHASE_STARTING,
+    "preparing_conversation": PHASE_STARTING,
+    "image_stream_resolve_start": PHASE_STARTING,
+    "starting_generation": PHASE_GENERATING,
+    "generating": PHASE_GENERATING,
+    "receiving_image": PHASE_DOWNLOADING,
+}
 
 
 class ImageTaskService:
@@ -217,6 +240,8 @@ class ImageTaskService:
                 "id": task_id,
                 "owner_id": owner,
                 "status": TASK_STATUS_QUEUED,
+                "progress": PHASE_QUEUED,
+                "progress_step": "",
                 "mode": mode,
                 "model": _clean(payload.get("model"), "gpt-image-2"),
                 "size": _clean(payload.get("size")),
@@ -248,12 +273,20 @@ class ImageTaskService:
         model: str,
     ) -> None:
         started = time.time()
-        self._update_task(key, status=TASK_STATUS_RUNNING, error="")
+        self._update_task(
+            key,
+            status=TASK_STATUS_RUNNING,
+            error="",
+            progress=PHASE_STARTING,
+            progress_step="",
+            started_ts=started,
+        )
         # 创建进度回调，每个步骤完成后更新任务状态
         def progress_callback(step: str) -> None:
+            phase = STEP_TO_PHASE.get(step, PHASE_GENERATING)
             if step == "image_stream_resolve_start":
                 self._update_task(key, started_ts=time.time())
-            self._update_task(key, progress=step)
+            self._update_task(key, progress=phase, progress_step=step)
         # 将进度回调添加到 payload 中（handler 会提取并传递给 ConversationRequest）
         payload_with_progress = {**payload, "progress_callback": progress_callback}
         try:
@@ -272,7 +305,7 @@ class ImageTaskService:
                     else:
                         result = third_party_image_generation(third_party, payload_with_progress)
                 except Exception as exc:
-                    error = RuntimeError("生成失败，请稍后再试。")
+                    error = RuntimeError("抱歉，出现了错误，这不是你的问题，也不是我的问题，请稍后再试！")
                     # 原始错误附加到异常对象，供日志记录排查
                     setattr(error, "original_error", f"第三方 API 图片生成失败：{exc}")
                     raise error from exc
@@ -290,7 +323,7 @@ class ImageTaskService:
                     mirror_api_key = str(third_party.get("api_key") or "")
                     result = mirror_result_images(result, mirror_base_url, mirror_api_key)
                 except Exception as exc:
-                    error = RuntimeError("图片保存到本地失败，请稍后重试。")
+                    error = RuntimeError("抱歉，出现了错误，这不是你的问题，也不是我的问题，请稍后再试！")
                     setattr(error, "original_error", f"镜像下载失败：{exc}")
                     raise error from exc
             data = result.get("data")
@@ -307,7 +340,16 @@ class ImageTaskService:
                 raise error
             usage = result.get("usage")
             duration_ms = int((time.time() - started) * 1000)
-            self._update_task(key, status=TASK_STATUS_SUCCESS, data=data, usage=usage, error="", duration_ms=duration_ms)
+            self._update_task(
+                key,
+                status=TASK_STATUS_SUCCESS,
+                data=data,
+                usage=usage,
+                error="",
+                duration_ms=duration_ms,
+                progress=PHASE_DONE,
+                progress_step="done",
+            )
             # 任务成功：扣减用户额度（管理员/无绑定用户跳过）
             try:
                 user_id = identity.get("user_id")
@@ -437,6 +479,8 @@ class ImageTaskService:
                 "updated_ts": item.get("updated_ts"),
                 "started_ts": item.get("started_ts"),
                 "duration_ms": item.get("duration_ms"),
+                "progress": _clean(item.get("progress")) or PHASE_QUEUED,
+                "progress_step": _clean(item.get("progress_step")),
             }
             data = item.get("data")
             if isinstance(data, list):

@@ -72,7 +72,7 @@ def _mirror_image_item(item: dict[str, Any], base_url: str, api_key: str) -> dic
 def mirror_result_images(result: dict[str, Any], base_url: str, api_key: str = "") -> dict[str, Any]:
     """处理图片生成/编辑结果：把 data 中的 url 替换为本地地址。
 
-    任一图片本地化失败即抛错（调用方应使本次生成失败），
+    多张图片并发下载；任一图片本地化失败即抛错（调用方应使本次生成失败），
     确保对外只暴露本地图片 URL。
     """
     if not config.image_local_download_enabled:
@@ -80,12 +80,20 @@ def mirror_result_images(result: dict[str, Any], base_url: str, api_key: str = "
     data = result.get("data")
     if not isinstance(data, list):
         return result
-    next_data: list[dict[str, Any]] = []
+    from concurrent.futures import ThreadPoolExecutor
+
+    plain: list[Any] = []
+    items: list[dict[str, Any]] = []
     for item in data:
-        if not isinstance(item, dict):
-            next_data.append(item)
-            continue
-        next_data.append(_mirror_image_item(item, base_url or "", api_key))
+        if isinstance(item, dict):
+            items.append(item)
+        else:
+            plain.append(item)
+    next_items: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(items)))) as pool:
+        futures = [pool.submit(_mirror_image_item, item, base_url or "", api_key) for item in items]
+        for future in futures:
+            next_items.append(future.result())  # 任一失败会在此处抛出
     next_result = dict(result)
-    next_result["data"] = next_data
+    next_result["data"] = [*plain, *next_items]
     return next_result

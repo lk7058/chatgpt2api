@@ -245,7 +245,7 @@ function taskDataToStoredImage(image: StoredImage, task: ImageTask): StoredImage
   const newTaskStatus = task.status === "queued" ? "queued" : task.status === "running" ? "running" : image.taskStatus;
   const shouldSetStartTime = newTaskStatus === "running" && !image.startTime;
   const startTime = shouldSetStartTime ? Date.now() : image.startTime;
-  // elapsedSecs 仅使用后端返回的值，确保计时从 image_stream_resolve_start 开始
+  // elapsedSecs 使用后端返回的值（任务开始执行即计时，含启动阶段）
   const elapsedSecs =
     newTaskStatus === "running" && typeof task.elapsed_secs === "number"
       ? task.elapsed_secs
