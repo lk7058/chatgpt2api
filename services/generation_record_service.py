@@ -43,8 +43,9 @@ class GenerationRecordService:
         self._records = records
 
     def _save(self) -> None:
+        # 紧凑格式：records 文件可达数十 MB（含参考图），全量写时减少序列化耗时
         self.path.write_text(
-            json.dumps(self._records, ensure_ascii=False, indent=2) + "\n",
+            json.dumps(self._records, ensure_ascii=False, separators=(",", ":")) + "\n",
             encoding="utf-8",
         )
 

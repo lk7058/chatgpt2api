@@ -30,6 +30,8 @@ function errorMessageFromValue(value: unknown): string {
 
 export const request = axios.create({
     baseURL: webConfig.apiUrl.replace(/\/$/, ""),
+    // 默认 30s 超时：避免网络/服务端异常时请求永久挂起（如云同步大文件写入时）
+    timeout: 30_000,
 });
 
 request.interceptors.request.use(async (config) => {

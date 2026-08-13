@@ -1030,7 +1030,8 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     ]);
     conversationsRef.current = nextConversations;
     setConversations(nextConversations);
-    await saveImageConversation(conversation);
+    // 云同步/本地持久化异步进行，不阻塞提交与任务启动（69MB 级 records 全量写可能耗时数秒）
+    void saveImageConversation(conversation);
   };
 
   const updateConversation = useCallback(
@@ -1356,30 +1357,35 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       activeConversationQueueIds.add(conversationId);
       const applyTasks = async (tasks: ImageTask[]) => {
         const taskMap = new Map(tasks.map((task) => [task.id, task]));
-        await updateConversation(conversationId, (current) => {
-          const conversation = current ?? snapshot;
-          const turns = conversation.turns.map((turn) => {
-            if (turn.id !== activeTurn.id) {
-              return turn;
-            }
-            const images = turn.images.map((image) => {
-              const taskId = image.taskId || image.id;
-              const task = taskMap.get(taskId);
-              return task ? taskDataToStoredImage({ ...image, taskId }, task) : image;
+        await updateConversation(
+          conversationId,
+          (current) => {
+            const conversation = current ?? snapshot;
+            const turns = conversation.turns.map((turn) => {
+              if (turn.id !== activeTurn.id) {
+                return turn;
+              }
+              const images = turn.images.map((image) => {
+                const taskId = image.taskId || image.id;
+                const task = taskMap.get(taskId);
+                return task ? taskDataToStoredImage({ ...image, taskId }, task) : image;
+              });
+              const derived = deriveTurnStatus({ ...turn, images });
+              return {
+                ...turn,
+                ...derived,
+                images,
+              };
             });
-            const derived = deriveTurnStatus({ ...turn, images });
             return {
-              ...turn,
-              ...derived,
-              images,
+              ...conversation,
+              updatedAt: new Date().toISOString(),
+              turns,
             };
-          });
-          return {
-            ...conversation,
-            updatedAt: new Date().toISOString(),
-            turns,
-          };
-        });
+          },
+          // 轮询期间不云同步：records 文件可达数十 MB，全量写很慢，避免每次 2s 轮询都触发
+          { persist: false },
+        );
       };
 
       try {
@@ -1464,6 +1470,12 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
               break;
             }
           }
+        }
+
+        // 任务全部结束：把最终状态持久化（轮询期间跳过了云同步）
+        const finalConversation = conversationsRef.current.find((conversation) => conversation.id === conversationId);
+        if (finalConversation) {
+          void saveImageConversation(finalConversation);
         }
 
         await loadQuota();
