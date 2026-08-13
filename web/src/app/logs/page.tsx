@@ -199,7 +199,7 @@ function LogsContent() {
               </button>
               <Button variant="outline" className="h-8 rounded-lg border-rose-200 bg-white px-3 text-rose-600 hover:bg-rose-50" onClick={() => setDeletingItems(items.filter((item) => selectedSet.has(item.id)))} disabled={selectedIds.length === 0 || isDeleting}>
                 <Trash2 className="size-4" />
-                删除所选
+                删除所有
               </Button>
             </div>
           </div>
@@ -216,7 +216,7 @@ function LogsContent() {
                   {isCallLog ? <TableHead className="w-36">图片</TableHead> : null}
                   {!isCallLog ? <TableHead>用户</TableHead> : null}
                   {!isCallLog ? <TableHead>IP</TableHead> : null}
-                  <TableHead>简述</TableHead>
+                  <TableHead>简介</TableHead>
                   <TableHead className="w-40">操作</TableHead>
                 </TableRow>
               </TableHeader>
@@ -309,7 +309,7 @@ function LogsContent() {
                   queued: "排队中",
                   starting: "启动中",
                   generating: "生成中",
-                  downloading: "正在拉取图片",
+                  downloading: "正在取回图片",
                   done: "完成",
                 };
                 const totalMs = phases.reduce((sum, item) => sum + (Number(item.duration_ms) || 0), 0);

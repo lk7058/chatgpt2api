@@ -37,9 +37,11 @@ import {
   deleteImageConversation,
   getImageConversationStats,
   listImageConversations,
+  readLocalImageConversations,
   renameImageConversation,
   saveImageConversation,
   saveImageConversations,
+  syncImageConversationsFromServer,
   type ImageConversation,
   type ImageConversationMode,
   type ImageTurn,
@@ -448,6 +450,7 @@ async function recoverConversationHistory(items: ImageConversation[]) {
 function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   const didLoadQuotaRef = useRef(false);
   const conversationsRef = useRef<ImageConversation[]>([]);
+  const selectedConversationIdRef = useRef<string | null>(null);
   const loadCancelledRef = useRef(false);
   const resultsViewportRef = useRef<HTMLDivElement>(null);
   const lastConversationIdRef = useRef<string | null>(null);
@@ -535,6 +538,10 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     conversationsRef.current = conversations;
   }, [conversations]);
 
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
   const scrollResultsToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
     const element = resultsViewportRef.current;
     if (!element) {
@@ -604,6 +611,37 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     };
   }, []);
 
+  // 统一更新会话列表并计算选中项：本地秒开时按存储的会话 ID 恢复；
+  // 后台同步完成时保留用户当前选择（新建草稿时保持不选中，避免打断）。
+  const applyConversationItems = useCallback(
+    (items: ImageConversation[], options?: { preserveSelection?: boolean }) => {
+      conversationsRef.current = items;
+      setConversations(items);
+
+      if (options?.preserveSelection) {
+        const currentId = selectedConversationIdRef.current;
+        if (currentId === null) {
+          // 用户正在新建草稿：后台同步不打断选择
+          setSelectedConversationId(null);
+          return;
+        }
+        if (items.some((conversation) => conversation.id === currentId)) {
+          setSelectedConversationId(currentId);
+          return;
+        }
+      }
+
+      const storedConversationId =
+        typeof window !== "undefined" ? window.localStorage.getItem(ACTIVE_CONVERSATION_STORAGE_KEY) : null;
+      const nextSelectedConversationId =
+        (storedConversationId && items.some((conversation) => conversation.id === storedConversationId)
+          ? storedConversationId
+          : null) ?? pickFallbackConversationId(items);
+      setSelectedConversationId(nextSelectedConversationId);
+    },
+    [setConversations, setSelectedConversationId],
+  );
+
   const loadHistory = useCallback(async () => {
     try {
       const storedRatio =
@@ -621,25 +659,33 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       setImageQuality(storedQuality || "auto");
       setImageCount(storedCount ? clampImageCount(storedCount) : "1");
 
-      const items = await listImageConversations();
-      const normalizedItems = await recoverConversationHistory(items);
+      // 1) 先读本地缓存：秒开渲染会话列表，不等服务端
+      const cached = await readLocalImageConversations();
       if (loadCancelledRef.current) {
         return;
       }
+      applyConversationItems(cached, { preserveSelection: false });
+      setIsLoadingHistory(false);
 
-      conversationsRef.current = normalizedItems;
-      setConversations(normalizedItems);
-      const storedConversationId =
-        typeof window !== "undefined" ? window.localStorage.getItem(ACTIVE_CONVERSATION_STORAGE_KEY) : null;
-      const nextSelectedConversationId =
-        (storedConversationId && normalizedItems.some((conversation) => conversation.id === storedConversationId)
-          ? storedConversationId
-          : null) ?? pickFallbackConversationId(normalizedItems);
-      setSelectedConversationId(nextSelectedConversationId);
+      // 2) 后台同步服务端记录：合并、恢复任务状态后刷新（失败不打扰，保留本地数据）
+      void (async () => {
+        try {
+          const synced = await syncImageConversationsFromServer();
+          if (loadCancelledRef.current || !synced) {
+            return;
+          }
+          const normalizedItems = await recoverConversationHistory(synced);
+          if (loadCancelledRef.current) {
+            return;
+          }
+          applyConversationItems(normalizedItems, { preserveSelection: true });
+        } catch {
+          // 服务端同步失败：本地数据已可用，无需提示
+        }
+      })();
     } catch (error) {
       const message = error instanceof Error ? error.message : "读取会话记录失败";
       toast.error(message);
-    } finally {
       if (!loadCancelledRef.current) {
         setIsLoadingHistory(false);
       }
@@ -654,6 +700,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     setConversations,
     setSelectedConversationId,
     setIsLoadingHistory,
+    applyConversationItems,
   ]);
 
   // Handle bfcache (back/forward cache) — re-sync task status on page restore

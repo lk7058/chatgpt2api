@@ -459,7 +459,7 @@ const PROGRESS_LABELS: Record<string, string> = {
   queued: "排队中",
   starting: "启动中",
   generating: "生成中",
-  downloading: "正在拉取图片",
+  downloading: "正在取回图片",
   done: "完成",
   // 兼容旧版细粒度进度步骤
   getting_account: "启动中",
@@ -469,7 +469,7 @@ const PROGRESS_LABELS: Record<string, string> = {
   preparing_conversation: "启动中",
   image_stream_resolve_start: "启动中",
   starting_generation: "生成中",
-  receiving_image: "正在拉取图片",
+  receiving_image: "正在取回图片",
 };
 
 function getProgressLabel(progress?: string) {

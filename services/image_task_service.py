@@ -104,7 +104,7 @@ def _public_task(task: dict[str, Any]) -> dict[str, Any]:
 PHASE_QUEUED = "queued"          # 排队中
 PHASE_STARTING = "starting"      # 启动中
 PHASE_GENERATING = "generating"  # 生成中
-PHASE_DOWNLOADING = "downloading"  # 正在拉取图片
+PHASE_DOWNLOADING = "downloading"  # 正在取回图片
 PHASE_DONE = "done"              # 完成
 
 # 细粒度进度步骤 → 四阶段映射
@@ -333,7 +333,7 @@ class ImageTaskService:
                 result = handler(payload_with_progress)
             if not isinstance(result, dict):
                 raise RuntimeError("image task returned streaming result unexpectedly")
-            # 第三方图片镜像到本地：先进入"正在拉取图片"阶段，下载完成或失败均结束
+            # 第三方图片镜像到本地：先进入"正在取回图片"阶段，下载完成或失败均结束
             if third_party is not None:
                 progress_callback("receiving_image")
                 try:

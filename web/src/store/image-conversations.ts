@@ -77,6 +77,24 @@ const imageConversationStorage = localforage.createInstance({
 const IMAGE_CONVERSATIONS_KEY = "items";
 let imageConversationWriteQueue: Promise<void> = Promise.resolve();
 
+// 与后端列表接口一致：超过该长度的 dataUrl 视为重负载，云同步时剥离
+const HEAVY_SYNC_BASE64_LEN = 50_000;
+
+// 上传服务端前剥离重负载：结果图 b64_json（裸 base64，可达数 MB）与超大参考图 dataUrl
+// 只在本机使用；服务端记录保留 url/元数据即可，跨设备展示与编辑会回源 url 重建。
+function stripHeavyPayloadForSync(conversation: ImageConversation): ImageConversation {
+  return {
+    ...conversation,
+    turns: conversation.turns.map((turn) => ({
+      ...turn,
+      images: turn.images.map(({ b64_json: _b64, ...rest }) => rest),
+      referenceImages: turn.referenceImages.map((image) =>
+        image.dataUrl.length > HEAVY_SYNC_BASE64_LEN ? { ...image, dataUrl: "" } : image,
+      ),
+    })),
+  };
+}
+
 function normalizeStoredImage(image: StoredImage): StoredImage {
   const normalized = {
     ...image,
@@ -254,7 +272,7 @@ async function syncPushConversations(conversations: ImageConversation[]): Promis
         id: conversation.id,
         kind: "image",
         title: conversation.title || conversation.turns[0]?.prompt?.slice(0, 50) || "未命名",
-        payload: conversation,
+        payload: stripHeavyPayloadForSync(conversation),
         created_at: conversation.createdAt,
         updated_at: conversation.updatedAt,
       });
@@ -296,24 +314,64 @@ async function readStoredImageConversations(): Promise<ImageConversation[]> {
   return items.map(normalizeConversation);
 }
 
-export async function listImageConversations(): Promise<ImageConversation[]> {
-  const synced = await syncPullConversations();
-  if (synced !== null) {
-    // 合并服务端记录与本地缓存（服务端优先）
-    const local = await readStoredImageConversations();
-    const merged = new Map<string, ImageConversation>();
-    for (const conversation of synced) {
-      merged.set(conversation.id, conversation);
-    }
-    for (const conversation of local) {
-      const current = merged.get(conversation.id);
-      merged.set(conversation.id, current ? pickLatestConversation(current, conversation) : conversation);
-    }
-    const result = sortImageConversations([...merged.values()]);
-    void imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, result);
-    return result;
-  }
+// 仅读本地缓存（秒开），不做任何网络请求
+export async function readLocalImageConversations(): Promise<ImageConversation[]> {
   return sortImageConversations(await readStoredImageConversations());
+}
+
+// 合并服务端记录与本地缓存：优先取较新版本；若服务端版本较新但缺少 b64_json
+// （上传时已剥离），把本地独有的 b64_json 补回，保证同设备上结果图可即时展示与作为编辑参考图。
+function mergeSyncedConversations(synced: ImageConversation[], local: ImageConversation[]): ImageConversation[] {
+  const merged = new Map<string, ImageConversation>();
+  for (const conversation of synced) {
+    merged.set(conversation.id, conversation);
+  }
+  for (const conversation of local) {
+    const server = merged.get(conversation.id);
+    if (!server) {
+      merged.set(conversation.id, conversation);
+      continue;
+    }
+    const latest = pickLatestConversation(server, conversation);
+    if (latest === conversation) {
+      merged.set(conversation.id, conversation);
+      continue;
+    }
+    // 服务端版本较新但缺 b64_json：把本地对应的 b64_json 补回去
+    const localTurns = new Map(conversation.turns.map((turn) => [turn.id, turn]));
+    const turns = latest.turns.map((turn) => {
+      const localTurn = localTurns.get(turn.id);
+      if (!localTurn) {
+        return turn;
+      }
+      const localImages = new Map(localTurn.images.map((image) => [image.id, image]));
+      const images = turn.images.map((image) => {
+        const localImage = localImages.get(image.id);
+        return localImage?.b64_json && !image.b64_json ? { ...image, b64_json: localImage.b64_json } : image;
+      });
+      return { ...turn, images };
+    });
+    merged.set(conversation.id, { ...latest, turns });
+  }
+  return sortImageConversations([...merged.values()]);
+}
+
+// 后台同步：从服务端拉取记录并与本地缓存合并后写回缓存。
+// 未登录或同步失败时返回 null，调用方应保留本地数据继续使用。
+export async function syncImageConversationsFromServer(): Promise<ImageConversation[] | null> {
+  const synced = await syncPullConversations();
+  if (synced === null) {
+    return null;
+  }
+  const local = await readStoredImageConversations();
+  const result = mergeSyncedConversations(synced, local);
+  void imageConversationStorage.setItem(IMAGE_CONVERSATIONS_KEY, result);
+  return result;
+}
+
+export async function listImageConversations(): Promise<ImageConversation[]> {
+  const synced = await syncImageConversationsFromServer();
+  return synced ?? (await readLocalImageConversations());
 }
 
 export async function saveImageConversations(conversations: ImageConversation[]): Promise<void> {
