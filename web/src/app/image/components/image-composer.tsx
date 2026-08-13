@@ -35,6 +35,7 @@ type ImageComposerProps = {
   onImageQualityChange: (value: string) => void;
   onImageModelChange: (value: ImageModel) => void;
   onSubmit: () => void | Promise<void>;
+  isSubmitting: boolean;
   onPickReferenceImage: () => void;
   onReferenceImageChange: (files: File[]) => void | Promise<void>;
   onRemoveReferenceImage: (index: number) => void;
@@ -105,6 +106,7 @@ export function ImageComposer({
   onImageQualityChange,
   onImageModelChange,
   onSubmit,
+  isSubmitting,
   onPickReferenceImage,
   onReferenceImageChange,
   onRemoveReferenceImage,
@@ -291,6 +293,9 @@ export function ImageComposer({
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
+                  if (isSubmitting) {
+                    return;
+                  }
                   void onSubmit();
                 }
               }}
@@ -520,11 +525,15 @@ export function ImageComposer({
                 <button
                   type="button"
                   onClick={() => void onSubmit()}
-                  disabled={!prompt.trim()}
+                  disabled={!prompt.trim() || isSubmitting}
                   className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-stone-950 text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300 sm:size-11"
                   aria-label={referenceImages.length > 0 ? "编辑图片" : "生成图片"}
                 >
-                  <ArrowUp className="size-3.5 sm:size-4" />
+                  {isSubmitting ? (
+                    <LoaderCircle className="size-3.5 animate-spin sm:size-4" />
+                  ) : (
+                    <ArrowUp className="size-3.5 sm:size-4" />
+                  )}
                 </button>
               </div>
             </div>

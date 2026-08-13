@@ -484,6 +484,8 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   const [conversations, setConversations] = useState<ImageConversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [availableQuota, setAvailableQuota] = useState("加载中...");
   const [userQuotaLeft, setUserQuotaLeft] = useState(-1);
   const [lightboxImages, setLightboxImages] = useState<ImageLightboxItem[]>([]);
@@ -728,6 +730,8 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       }
       applyConversationItems(cached, { preserveSelection: false });
       setIsLoadingHistory(false);
+      // 本地缓存中可能有刷新前进行中的任务：恢复持续轮询，保证状态及时更新
+      resumeActiveConversationQueues();
 
       // 2) 后台同步服务端记录：合并、恢复任务状态后刷新（失败不打扰，保留本地数据）
       void (async () => {
@@ -741,6 +745,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             return;
           }
           applyConversationItems(normalizedItems, { preserveSelection: true });
+          resumeActiveConversationQueues();
         } catch {
           // 服务端同步失败：本地数据已可用，无需提示
         }
@@ -763,6 +768,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     setSelectedConversationId,
     setIsLoadingHistory,
     applyConversationItems,
+    resumeActiveConversationQueues,
   ]);
 
   // Handle bfcache (back/forward cache) — re-sync task status on page restore
@@ -1449,9 +1455,11 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
               }
             }
           } catch (pollError) {
+            // 网络抖动/服务重启时轮询可能短暂失败：不要轻易把仍在运行的任务标记为失败。
+            // 连续失败足够多次后暂停轮询（任务在后台继续，刷新页面或切回前台会恢复）。
             consecutiveErrors += 1;
-            if (consecutiveErrors >= 10) {
-              throw pollError;
+            if (consecutiveErrors >= 30) {
+              break;
             }
           }
         }
@@ -1498,6 +1506,35 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     [loadQuota, updateConversation],
   );
   /* eslint-enable react-hooks/preserve-manual-memoization */
+
+  // 页面加载/恢复时：对本地仍处于进行中（queued/generating 且含 loading 图片）的会话
+  // 恢复持续轮询，避免刷新页面后任务状态卡住不动。
+  // 后端 _submit 对相同 taskId 幂等（已存在直接返回不重启动、不重复计费），重新提交安全。
+  const resumeActiveConversationQueues = useCallback(() => {
+    for (const conversation of conversationsRef.current) {
+      if (
+        !activeConversationQueueIds.has(conversation.id) &&
+        conversation.turns.some(
+          (turn) =>
+            (turn.status === "queued" || turn.status === "generating") &&
+            turn.images.some((image) => image.status === "loading"),
+        )
+      ) {
+        void runConversationQueue(conversation.id);
+      }
+    }
+  }, [runConversationQueue]);
+
+  // 浏览器标签页在后台时定时器会被节流，切回前台立即恢复进行中任务的轮询
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        resumeActiveConversationQueues();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [resumeActiveConversationQueues]);
 
   const handleRegenerateTurn = useCallback(
     async (conversationId: string, turnId: string) => {
@@ -1693,91 +1730,102 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   }, [conversations, runConversationQueue]);
 
   const handleSubmit = async () => {
-    const prompt = imagePrompt.trim();
-    if (!prompt) {
-      toast.error("请输入提示词");
+    // 提交锁：防止卡顿/连按回车时重复提交产生多个相同任务，浪费额度
+    if (isSubmittingRef.current) {
       return;
     }
-
-    // 先验证用户额度，再发送生图请求
-    const countToSubmit = parsedCount || 1;
-    if (userQuotaLeft >= 0 && userQuotaLeft < countToSubmit) {
-      toast.error(`额度不足：本次需要 ${countToSubmit} 额度，当前剩余 ${userQuotaLeft}`);
-      return;
-    }
-    if (userQuotaLeft === 0) {
-      toast.error("额度不足，请签到或联系管理员充值");
-      return;
-    }
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
     try {
-      const me = await fetchMe();
-      const liveLeft = me.quota_total === undefined || me.quota_total < 0 ? -1 : Number(me.quota_left ?? 0);
-      if (liveLeft >= 0 && liveLeft < countToSubmit) {
-        toast.error(`额度不足：本次需要 ${countToSubmit} 额度，当前剩余 ${liveLeft}`);
+      const prompt = imagePrompt.trim();
+      if (!prompt) {
+        toast.error("请输入提示词");
         return;
       }
-      if (liveLeft >= 0) {
-        setUserQuotaLeft(liveLeft);
+
+      // 先验证用户额度，再发送生图请求
+      const countToSubmit = parsedCount || 1;
+      if (userQuotaLeft >= 0 && userQuotaLeft < countToSubmit) {
+        toast.error(`额度不足：本次需要 ${countToSubmit} 额度，当前剩余 ${userQuotaLeft}`);
+        return;
       }
-    } catch {
-      // 额度查询失败不阻断提交，后端仍会二次校验
-    }
-
-    const effectiveImageMode: ImageConversationMode = referenceImageFiles.length > 0 ? "edit" : "generate";
-
-    const targetConversation = selectedConversationId
-      ? conversationsRef.current.find((conversation) => conversation.id === selectedConversationId) ?? null
-      : null;
-    const now = new Date().toISOString();
-    const conversationId = targetConversation?.id ?? createId();
-    const turnId = createId();
-    const imageSize = `${imageWidth || 1024}x${imageHeight || 1024}`;
-    const draftTurn: ImageTurn = {
-      id: turnId,
-      prompt,
-      model: imageModel,
-      mode: effectiveImageMode,
-      referenceImages: effectiveImageMode === "edit" ? referenceImages : [],
-      count: parsedCount,
-      size: imageSize,
-      ratio: imageRatio,
-      tier: imageTier,
-      quality: imageQuality,
-      images: createLoadingImages(turnId, parsedCount),
-      createdAt: now,
-      status: "queued",
-    };
-
-    const baseConversation: ImageConversation = targetConversation
-      ? {
-          ...targetConversation,
-          updatedAt: now,
-          turns: [...targetConversation.turns, draftTurn],
+      if (userQuotaLeft === 0) {
+        toast.error("额度不足，请签到或联系管理员充值");
+        return;
+      }
+      try {
+        const me = await fetchMe();
+        const liveLeft = me.quota_total === undefined || me.quota_total < 0 ? -1 : Number(me.quota_left ?? 0);
+        if (liveLeft >= 0 && liveLeft < countToSubmit) {
+          toast.error(`额度不足：本次需要 ${countToSubmit} 额度，当前剩余 ${liveLeft}`);
+          return;
         }
-      : {
-          id: conversationId,
-          title: buildConversationTitle(prompt),
-          createdAt: now,
-          updatedAt: now,
-          turns: [draftTurn],
+        if (liveLeft >= 0) {
+          setUserQuotaLeft(liveLeft);
+        }
+      } catch {
+        // 额度查询失败不阻断提交，后端仍会二次校验
+      }
+
+      const effectiveImageMode: ImageConversationMode = referenceImageFiles.length > 0 ? "edit" : "generate";
+
+      const targetConversation = selectedConversationId
+        ? conversationsRef.current.find((conversation) => conversation.id === selectedConversationId) ?? null
+        : null;
+      const now = new Date().toISOString();
+      const conversationId = targetConversation?.id ?? createId();
+      const turnId = createId();
+      const imageSize = `${imageWidth || 1024}x${imageHeight || 1024}`;
+      const draftTurn: ImageTurn = {
+        id: turnId,
+        prompt,
+        model: imageModel,
+        mode: effectiveImageMode,
+        referenceImages: effectiveImageMode === "edit" ? referenceImages : [],
+        count: parsedCount,
+        size: imageSize,
+        ratio: imageRatio,
+        tier: imageTier,
+        quality: imageQuality,
+        images: createLoadingImages(turnId, parsedCount),
+        createdAt: now,
+        status: "queued",
       };
 
-    shouldStickToBottomRef.current = true;
-    const btn = scrollToLatestBtnRef.current;
-    if (btn) btn.style.display = "none";
-    setSelectedConversationId(conversationId);
-    clearComposerInputs();
+      const baseConversation: ImageConversation = targetConversation
+        ? {
+            ...targetConversation,
+            updatedAt: now,
+            turns: [...targetConversation.turns, draftTurn],
+          }
+        : {
+            id: conversationId,
+            title: buildConversationTitle(prompt),
+            createdAt: now,
+            updatedAt: now,
+            turns: [draftTurn],
+          };
 
-    await persistConversation(baseConversation);
-    void runConversationQueue(conversationId);
+      shouldStickToBottomRef.current = true;
+      const btn = scrollToLatestBtnRef.current;
+      if (btn) btn.style.display = "none";
+      setSelectedConversationId(conversationId);
+      clearComposerInputs();
 
-    const targetStats = getImageConversationStats(baseConversation);
-    if (targetStats.running > 0 || targetStats.queued > 1) {
-      toast.success("已加入当前对话队列");
-    } else if (!targetConversation) {
-      toast.success("已创建新对话并开始处理");
-    } else {
-      toast.success("已发送到当前对话");
+      await persistConversation(baseConversation);
+      void runConversationQueue(conversationId);
+
+      const targetStats = getImageConversationStats(baseConversation);
+      if (targetStats.running > 0 || targetStats.queued > 1) {
+        toast.success("已加入当前对话队列");
+      } else if (!targetConversation) {
+        toast.success("已创建新对话并开始处理");
+      } else {
+        toast.success("已发送到当前对话");
+      }
+    } finally {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -1916,6 +1964,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             onImageQualityChange={setImageQuality}
             onImageModelChange={setImageModel}
             onSubmit={handleSubmit}
+            isSubmitting={isSubmitting}
             onPickReferenceImage={() => fileInputRef.current?.click()}
             onReferenceImageChange={handleReferenceImageChange}
             onRemoveReferenceImage={handleRemoveReferenceImage}
