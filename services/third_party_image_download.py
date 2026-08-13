@@ -13,7 +13,7 @@ from services.image_storage_service import image_storage_service
 logger = logging.getLogger("third_party_image_download")
 
 
-def _download_image_bytes(url: str, api_key: str = "", timeout: int = 120, retries: int = 1) -> bytes:
+def _download_image_bytes(url: str, api_key: str = "", timeout: int = 240, retries: int = 1) -> bytes:
     headers = {"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt2api image mirror"}
     # 部分中转站图片 URL 需要携带鉴权头才能访问
     if api_key:
@@ -39,6 +39,7 @@ def _mirror_image_item(item: dict[str, Any], base_url: str, api_key: str) -> dic
     """把单个图片结果项下载到本地，返回替换 url 后的项。
 
     优先使用 b64_json（无需下载），否则下载 url。
+    **本地化失败时抛错**（不返回第三方 URL，保证所有图片 URL 都走本地）。
     """
     next_item = dict(item)
     b64 = str(item.get("b64_json") or "").strip()
@@ -64,33 +65,27 @@ def _mirror_image_item(item: dict[str, Any], base_url: str, api_key: str) -> dic
             next_item["local"] = True
             return next_item
         except Exception as exc:
-            # 下载失败保留源地址，不阻断流程（同时记录便于排查）
-            logger.warning("mirror url failed (%s): %s", url[:80], exc)
+            raise RuntimeError(f"图片保存到本地失败（{url[:80]}）：{exc}") from exc
     return next_item
 
 
 def mirror_result_images(result: dict[str, Any], base_url: str, api_key: str = "") -> dict[str, Any]:
-    """处理图片生成/编辑结果：若开启本地下载，把 data 中的 url 替换为本地地址。
+    """处理图片生成/编辑结果：把 data 中的 url 替换为本地地址。
 
-    返回处理后的结果。若全部下载失败则保留原 URL（避免阻断生成流程）。
+    任一图片本地化失败即抛错（调用方应使本次生成失败），
+    确保对外只暴露本地图片 URL。
     """
     if not config.image_local_download_enabled:
         return result
     data = result.get("data")
     if not isinstance(data, list):
         return result
-    mirrored = False
     next_data: list[dict[str, Any]] = []
     for item in data:
         if not isinstance(item, dict):
             next_data.append(item)
             continue
-        next_item = _mirror_image_item(item, base_url or "", api_key)
-        if next_item.get("local"):
-            mirrored = True
-        next_data.append(next_item)
-    if not mirrored:
-        return result
+        next_data.append(_mirror_image_item(item, base_url or "", api_key))
     next_result = dict(result)
     next_result["data"] = next_data
     return next_result

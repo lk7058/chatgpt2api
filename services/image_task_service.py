@@ -281,7 +281,7 @@ class ImageTaskService:
                 result = handler(payload_with_progress)
             if not isinstance(result, dict):
                 raise RuntimeError("image task returned streaming result unexpectedly")
-            # 第三方图片镜像到本地：下载后替换 url 为本地地址（避免暴露源站）
+            # 第三方图片镜像到本地：下载后替换 url 为本地地址（失败则任务报错，不外露第三方 URL）
             if third_party is not None:
                 try:
                     from services.third_party_image_download import mirror_result_images
@@ -290,7 +290,9 @@ class ImageTaskService:
                     mirror_api_key = str(third_party.get("api_key") or "")
                     result = mirror_result_images(result, mirror_base_url, mirror_api_key)
                 except Exception as exc:
-                    print(f"[image-task] mirror images failed: {exc}")
+                    error = RuntimeError("图片保存到本地失败，请稍后重试。")
+                    setattr(error, "original_error", f"镜像下载失败：{exc}")
+                    raise error from exc
             data = result.get("data")
             account_email = _clean(result.get("_account_email") or result.get("account_email"))
             if not isinstance(data, list) or not data:

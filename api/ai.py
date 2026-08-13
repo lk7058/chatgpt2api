@@ -180,8 +180,11 @@ def create_router() -> APIRouter:
                         resolve_image_base_url(request),
                         str(third_party.get("api_key") or ""),
                     )
+                except HTTPException:
+                    raise
                 except Exception as exc:
                     print(f"[ai] mirror images failed: {exc}")
+                    raise HTTPException(status_code=502, detail={"error": "图片保存到本地失败，请稍后重试。"}) from exc
                 deduct_quota(identity, weight)
                 call.log("第三方 API 图片生成完成", result)
                 return result
@@ -239,8 +242,11 @@ def create_router() -> APIRouter:
                         resolve_image_base_url(request),
                         str(third_party.get("api_key") or ""),
                     )
+                except HTTPException:
+                    raise
                 except Exception as exc:
                     print(f"[ai] mirror edit images failed: {exc}")
+                    raise HTTPException(status_code=502, detail={"error": "图片保存到本地失败，请稍后重试。"}) from exc
                 deduct_quota(identity, weight)
                 call.log("第三方 API 图生图完成", result)
                 return result
