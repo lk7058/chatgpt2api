@@ -170,6 +170,8 @@ export type SettingsConfig = {
   image_retention_days?: number | string;
   image_local_download_enabled?: boolean;
   image_local_retention_days?: number | string;
+  image_prefer_b64_json?: boolean;
+  image_download_proxy?: string;
   image_poll_timeout_secs?: number | string;
   image_account_concurrency?: number | string;
   image_parallel_generation?: boolean;

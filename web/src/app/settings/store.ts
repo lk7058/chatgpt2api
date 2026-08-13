@@ -344,6 +344,8 @@ type SettingsStore = {
   setRefreshAccountIntervalMinute: (value: string) => void;
   setImageRetentionDays: (value: string) => void;
   setImageLocalDownloadEnabled: (value: boolean) => void;
+  setImagePreferB64Json: (value: boolean) => void;
+  setImageDownloadProxy: (value: string) => void;
   setImageLocalRetentionDays: (value: string) => void;
   setImagePollTimeoutSecs: (value: string) => void;
   setImageAccountConcurrency: (value: string) => void;
@@ -617,6 +619,14 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   setImageLocalRetentionDays: (value) => {
     set((state) => state.config ? { config: { ...state.config, image_local_retention_days: value } } : {});
+  },
+
+  setImagePreferB64Json: (value) => {
+    set((state) => state.config ? { config: { ...state.config, image_prefer_b64_json: value } } : {});
+  },
+
+  setImageDownloadProxy: (value) => {
+    set((state) => state.config ? { config: { ...state.config, image_download_proxy: value } } : {});
   },
 
   setImagePollTimeoutSecs: (value) => {

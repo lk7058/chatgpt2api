@@ -115,13 +115,22 @@ def image_generation(item: dict[str, Any], body: dict[str, Any]) -> dict[str, An
     payload.pop("base_url", None)
     payload.pop("progress_callback", None)
     payload["n"] = max(1, int(payload.get("n") or 1))
-    resp = requests.post(url, headers=_headers(item), json=payload, timeout=600)
-    try:
-        data = resp.json()
-    except Exception:
-        data = {"error": {"message": resp.text[:500] or f"HTTP {resp.status_code}"}}
-    if resp.status_code >= 400:
-        raise RuntimeError(_third_party_error_message(resp.status_code, data))
+
+    def _post(current: dict[str, Any]):
+        resp = requests.post(url, headers=_headers(item), json=current, timeout=600)
+        try:
+            data = resp.json()
+        except Exception:
+            data = {"error": {"message": resp.text[:500] or f"HTTP {resp.status_code}"}}
+        return resp.status_code, data
+
+    status, data = _post(payload)
+    if status >= 400 and payload.get("response_format") == "b64_json":
+        # 上游不支持 b64_json：回退 url 重试一次（避免直接失败）
+        payload["response_format"] = "url"
+        status, data = _post(payload)
+    if status >= 400:
+        raise RuntimeError(_third_party_error_message(status, data))
     return data
 
 
@@ -169,13 +178,22 @@ def image_edit(item: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
 
     headers = _headers(item)
     headers.pop("Content-Type", None)  # multipart 由 requests 自动设置
-    resp = requests.post(url, headers=headers, data=form_data, multipart=mime, timeout=600)
-    try:
-        data = resp.json()
-    except Exception:
-        data = {"error": {"message": resp.text[:500] or f"HTTP {resp.status_code}"}}
-    if resp.status_code >= 400:
-        raise RuntimeError(_third_party_error_message(resp.status_code, data))
+
+    def _post(current: dict[str, Any]):
+        resp = requests.post(url, headers=headers, data=current, multipart=mime, timeout=600)
+        try:
+            data = resp.json()
+        except Exception:
+            data = {"error": {"message": resp.text[:500] or f"HTTP {resp.status_code}"}}
+        return resp.status_code, data
+
+    status, data = _post(form_data)
+    if status >= 400 and form_data.get("response_format") == "b64_json":
+        # 上游不支持 b64_json：回退 url 重试一次
+        form_data["response_format"] = "url"
+        status, data = _post(form_data)
+    if status >= 400:
+        raise RuntimeError(_third_party_error_message(status, data))
     return data
 
 

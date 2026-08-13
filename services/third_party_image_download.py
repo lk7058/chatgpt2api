@@ -13,15 +13,24 @@ from services.image_storage_service import image_storage_service
 logger = logging.getLogger("third_party_image_download")
 
 
-def _download_image_bytes(url: str, api_key: str = "", timeout: int = 90, retries: int = 1) -> bytes:
+def _download_proxies() -> dict[str, str] | None:
+    """海外 CDN 下载慢时，可配置代理（config.image_download_proxy）。"""
+    proxy = config.image_download_proxy
+    if not proxy:
+        return None
+    return {"http": proxy, "https": proxy}
+
+
+def _download_image_bytes(url: str, api_key: str = "", timeout: int = 120, retries: int = 1) -> bytes:
     headers = {"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt2api image mirror"}
     # 部分中转站图片 URL 需要携带鉴权头才能访问
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    proxies = _download_proxies()
     last_exc: Exception | None = None
     for attempt in range(retries + 1):
         try:
-            resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+            resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True, proxies=proxies)
             if not 200 <= resp.status_code < 300:
                 raise RuntimeError(f"download failed: HTTP {resp.status_code}")
             if not resp.content:
@@ -36,11 +45,11 @@ def _download_image_bytes(url: str, api_key: str = "", timeout: int = 90, retrie
 
 
 # 单连接下载限速时启用：最多分片数与最小分片大小
-MAX_PARALLEL_CHUNKS = 8
+MAX_PARALLEL_CHUNKS = 12
 MIN_CHUNK_BYTES = 256 * 1024
 
 
-def _download_image_bytes_parallel(url: str, api_key: str = "", timeout: int = 60, retries: int = 1) -> bytes:
+def _download_image_bytes_parallel(url: str, api_key: str = "", timeout: int = 120, retries: int = 1) -> bytes:
     """多连接 Range 分片并发下载，应对中转 CDN 对单连接限速导致的下载缓慢。
 
     先用 HEAD 获取总大小，按片并发拉取后合并；任何不支持 Range / HEAD 失败 /
@@ -49,9 +58,10 @@ def _download_image_bytes_parallel(url: str, api_key: str = "", timeout: int = 6
     headers = {"Accept": "image/*,*/*;q=0.8", "User-Agent": "chatgpt2api image mirror"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    proxies = _download_proxies()
 
     try:
-        head_resp = requests.head(url, headers=headers, timeout=15, allow_redirects=True)
+        head_resp = requests.head(url, headers=headers, timeout=20, allow_redirects=True, proxies=proxies)
         total = int(head_resp.headers.get("content-length") or 0)
     except Exception:
         total = 0
@@ -75,7 +85,7 @@ def _download_image_bytes_parallel(url: str, api_key: str = "", timeout: int = 6
         chunk_headers = {**headers, "Range": f"bytes={chunk_range[0]}-{chunk_range[1]}"}
         for attempt in range(retries + 1):
             try:
-                resp = requests.get(url, headers=chunk_headers, timeout=timeout, allow_redirects=True)
+                resp = requests.get(url, headers=chunk_headers, timeout=timeout, allow_redirects=True, proxies=proxies)
                 if resp.status_code == 200:
                     # 服务器忽略 Range 返回全量：放弃分片
                     return "full", resp.content

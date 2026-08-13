@@ -584,6 +584,19 @@ class ConfigStore:
         return bool(value)
 
     @property
+    def image_prefer_b64_json(self) -> bool:
+        """生成时优先请求 response_format=b64_json（图片随响应返回，避免海外 CDN 下载慢）。"""
+        value = self.data.get("image_prefer_b64_json", True)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    @property
+    def image_download_proxy(self) -> str:
+        """图片镜像下载代理（海外 CDN 慢时可配置 http://host:port）。"""
+        return str(self.data.get("image_download_proxy") or "").strip()
+
+    @property
     def image_local_retention_days(self) -> int:
         """下载到本地的第三方图片保留天数，到期自动删除。"""
         try:
@@ -910,6 +923,8 @@ class ConfigStore:
         data["site_title"] = self.site_title
         data["image_local_download_enabled"] = self.image_local_download_enabled
         data["image_local_retention_days"] = self.image_local_retention_days
+        data["image_prefer_b64_json"] = self.image_prefer_b64_json
+        data["image_download_proxy"] = self.image_download_proxy
         data["smtp"] = self.get_public_smtp_settings()
         data["turnstile"] = self.get_public_turnstile_settings()
         data["model_quota_weights"] = self.model_quota_weights
@@ -985,6 +1000,10 @@ class ConfigStore:
             next_data["image_local_download_enabled"] = _normalize_bool(next_data.get("image_local_download_enabled"), True)
         if "image_local_retention_days" in next_data:
             next_data["image_local_retention_days"] = _normalize_positive_int(next_data.get("image_local_retention_days"), 7, 1)
+        if "image_prefer_b64_json" in next_data:
+            next_data["image_prefer_b64_json"] = _normalize_bool(next_data.get("image_prefer_b64_json"), True)
+        if "image_download_proxy" in next_data:
+            next_data["image_download_proxy"] = str(next_data.get("image_download_proxy") or "").strip()
         if "model_quota_weights" in next_data:
             next_data["model_quota_weights"] = _normalize_model_quota_weights(next_data.get("model_quota_weights"))
         if "third_party_apis" in next_data:

@@ -164,7 +164,7 @@ class ImageTaskService:
             "n": 1,
             "size": size,
             "quality": quality,
-            "response_format": "url",
+            "response_format": "b64_json" if config.image_prefer_b64_json else "url",
             "base_url": base_url,
         }
         return self._submit(identity, client_task_id=client_task_id, mode="generate", payload=payload)
@@ -190,7 +190,7 @@ class ImageTaskService:
             "n": 1,
             "size": size,
             "quality": quality,
-            "response_format": "url",
+            "response_format": "b64_json" if config.image_prefer_b64_json else "url",
             "base_url": base_url,
         }
         return self._submit(identity, client_task_id=client_task_id, mode="edit", payload=payload)

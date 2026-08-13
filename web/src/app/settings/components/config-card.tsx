@@ -27,6 +27,8 @@ export function ConfigCard() {
   const setRefreshAccountIntervalMinute = useSettingsStore((state) => state.setRefreshAccountIntervalMinute);
   const setImageRetentionDays = useSettingsStore((state) => state.setImageRetentionDays);
   const setImageLocalDownloadEnabled = useSettingsStore((state) => state.setImageLocalDownloadEnabled);
+  const setImagePreferB64Json = useSettingsStore((state) => state.setImagePreferB64Json);
+  const setImageDownloadProxy = useSettingsStore((state) => state.setImageDownloadProxy);
   const setImageLocalRetentionDays = useSettingsStore((state) => state.setImageLocalRetentionDays);
   const setImagePollTimeoutSecs = useSettingsStore((state) => state.setImagePollTimeoutSecs);
   const setImageAccountConcurrency = useSettingsStore((state) => state.setImageAccountConcurrency);
@@ -240,6 +242,29 @@ export function ConfigCard() {
               disabled={!config?.image_local_download_enabled}
             />
             <p className="text-xs text-stone-500">下载到本地的第三方图片保留天数，到期自动删除。</p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm text-stone-700">生成时优先返回图片数据（b64_json）</label>
+            <Checkbox
+              checked={Boolean(config?.image_prefer_b64_json)}
+              onCheckedChange={(checked) => setImagePreferB64Json(Boolean(checked))}
+            />
+            <p className="text-xs leading-5 text-stone-500">
+              开启后，生成请求要求上游直接返回图片数据（图片随响应一起回来，无需再从海外 CDN 下载，可大幅减少下载等待/失败）；
+              若上游不支持会自动回退到 URL 方式。
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm text-stone-700">图片下载代理（可选）</label>
+            <Input
+              value={String(config?.image_download_proxy || "")}
+              onChange={(event) => setImageDownloadProxy(event.target.value)}
+              placeholder="http://127.0.0.1:7890"
+              className="h-10 rounded-xl border-stone-200 bg-white"
+            />
+            <p className="text-xs leading-5 text-stone-500">
+              海外 CDN 下载慢/失败时，配置可用的 HTTP/HTTPS 代理（如 http://ip:port），下载图片时走代理。
+            </p>
           </div>
           <div className="space-y-2">
             <label className="text-sm text-stone-700">图片轮询超时</label>
