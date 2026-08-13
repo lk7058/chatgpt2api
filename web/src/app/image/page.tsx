@@ -454,6 +454,9 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   const conversationsRef = useRef<ImageConversation[]>([]);
   const selectedConversationIdRef = useRef<string | null>(null);
   const referenceFetchingRef = useRef<Set<string>>(new Set());
+  // 由 resumeActiveConversationQueues 赋值；loadHistory 通过 ref 调用，
+  // 避免在依赖数组中引用定义于其后的 const 触发 TDZ 崩溃
+  const resumeQueuesRef = useRef<() => void>(() => {});
   const loadCancelledRef = useRef(false);
   const resultsViewportRef = useRef<HTMLDivElement>(null);
   const lastConversationIdRef = useRef<string | null>(null);
@@ -731,7 +734,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       applyConversationItems(cached, { preserveSelection: false });
       setIsLoadingHistory(false);
       // 本地缓存中可能有刷新前进行中的任务：恢复持续轮询，保证状态及时更新
-      resumeActiveConversationQueues();
+      resumeQueuesRef.current();
 
       // 2) 后台同步服务端记录：合并、恢复任务状态后刷新（失败不打扰，保留本地数据）
       void (async () => {
@@ -745,7 +748,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             return;
           }
           applyConversationItems(normalizedItems, { preserveSelection: true });
-          resumeActiveConversationQueues();
+          resumeQueuesRef.current();
         } catch {
           // 服务端同步失败：本地数据已可用，无需提示
         }
@@ -768,7 +771,6 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     setSelectedConversationId,
     setIsLoadingHistory,
     applyConversationItems,
-    resumeActiveConversationQueues,
   ]);
 
   // Handle bfcache (back/forward cache) — re-sync task status on page restore
@@ -1524,6 +1526,8 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       }
     }
   }, [runConversationQueue]);
+  // 供 loadHistory 通过 ref 调用（避免 TDZ）
+  resumeQueuesRef.current = resumeActiveConversationQueues;
 
   // 浏览器标签页在后台时定时器会被节流，切回前台立即恢复进行中任务的轮询
   useEffect(() => {
