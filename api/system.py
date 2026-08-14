@@ -149,7 +149,24 @@ def create_router(app_version: str) -> APIRouter:
     @router.get("/api/logs")
     async def get_logs(type: str = "", start_date: str = "", end_date: str = "", authorization: str | None = Header(default=None)):
         require_admin(authorization)
-        return {"items": log_service.list(type=type.strip(), start_date=start_date.strip(), end_date=end_date.strip())}
+        items = log_service.list(type=type.strip(), start_date=start_date.strip(), end_date=end_date.strip())
+        # 调用日志注入用户邮箱：按 detail.key_id（用户 id）查用户
+        from services.user_service import user_service
+
+        email_cache: dict[str, str] = {}
+        for item in items:
+            detail = item.get("detail")
+            if not isinstance(detail, dict):
+                continue
+            key_id = str(detail.get("key_id") or "")
+            if not key_id or detail.get("email"):
+                continue
+            if key_id not in email_cache:
+                user = user_service.get_user(key_id)
+                email_cache[key_id] = str(user.get("email") or "") if user else ""
+            if email_cache[key_id]:
+                detail["email"] = email_cache[key_id]
+        return {"items": items}
 
     @router.post("/api/logs/delete")
     async def delete_logs(body: LogDeleteRequest, authorization: str | None = Header(default=None)):
