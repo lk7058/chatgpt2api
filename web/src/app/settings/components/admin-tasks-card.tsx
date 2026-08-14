@@ -52,14 +52,18 @@ export function AdminTasksCard() {
   const [confirmAll, setConfirmAll] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
-  const load = async () => {
-    setIsLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) {
+      setIsLoading(true);
+    }
     try {
       const data = await fetchAdminImageTasks();
       setItems(data.items);
       setSelected((current) => new Set([...current].filter((id) => data.items.some((item) => item.id === id))));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "加载任务列表失败");
+      if (!silent) {
+        toast.error(error instanceof Error ? error.message : "加载任务列表失败");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -71,6 +75,15 @@ export function AdminTasksCard() {
     }
     didLoadRef.current = true;
     void load();
+  }, []);
+
+  // 每 5 秒静默刷新：排队/进行中任务可实时读取与取消，避免切到页面看不到新任务
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void load(true);
+    }, 5000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activeItems = items.filter((item) => ACTIVE_STATUSES.has(item.status));

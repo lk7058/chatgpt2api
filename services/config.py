@@ -797,7 +797,7 @@ class ConfigStore:
     def site_title(self) -> str:
         """网站标题（浏览器标签页显示）。"""
         value = str(self.data.get("site_title") or "").strip()
-        return value or "ChatGPT 号池管理"
+        return value or "chatgpt2api"
 
     @property
     def allowed_email_domains(self) -> list[str]:

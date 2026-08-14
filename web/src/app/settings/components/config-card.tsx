@@ -540,7 +540,7 @@ export function ConfigCard() {
             <Input
               value={String(config?.site_title || "")}
               onChange={(event) => setSiteTitle(event.target.value)}
-              placeholder="ChatGPT 号池管理"
+              placeholder="chatgpt2api"
               className="h-10 rounded-xl border-stone-200 bg-white"
             />
             <p className="text-xs text-stone-500">显示在浏览器标签页的网站标题。</p>

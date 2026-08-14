@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ImageIcon, LoaderCircle, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, FilterX, ImageIcon, LoaderCircle, RefreshCw, Search, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { DateRangeFilter } from "@/components/date-range-filter";
@@ -62,6 +62,10 @@ function getStatus(item: SystemLog) {
 }
 
 function LogsContent() {
+  // 用户筛选：用户管理页「日志」按钮跳转时 URL 携带 user_id/email，这里读取并应用
+  const urlUserFilterRef = useRef({ userId: "", userEmail: "" });
+  const [userId, setUserId] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const [items, setItems] = useState<SystemLog[]>([]);
   const [type, setType] = useState<string>(LogType.Call);
   const [startDate, setStartDate] = useState("");
@@ -89,7 +93,13 @@ function LogsContent() {
   const loadLogs = async () => {
     setIsLoading(true);
     try {
-      const data = await fetchSystemLogs({ type, start_date: startDate, end_date: endDate });
+      const data = await fetchSystemLogs({
+        type: type === "all" ? "" : type,
+        start_date: startDate,
+        end_date: endDate,
+        user_id: urlUserFilterRef.current.userId,
+        email: urlUserFilterRef.current.userEmail,
+      });
       setItems(data.items);
       setSelectedIds((current) => current.filter((id) => data.items.some((item) => item.id === id)));
       setPage(1);
@@ -100,9 +110,30 @@ function LogsContent() {
     }
   };
 
+  // 挂载时从 URL 读取用户筛选（用户管理「日志」按钮跳转携带 user_id/email）
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const uid = params.get("user_id") || "";
+    const mail = params.get("email") || "";
+    urlUserFilterRef.current = { userId: uid, userEmail: mail };
+    setUserId(uid);
+    setUserEmail(mail);
+    if (uid || mail) {
+      setType("all");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const clearFilters = () => {
     setStartDate("");
     setEndDate("");
+    setUserId("");
+    setUserEmail("");
+    urlUserFilterRef.current = { userId: "", userEmail: "" };
+    setType(LogType.Call);
   };
 
   const openDetail = (item: SystemLog) => {
@@ -143,7 +174,8 @@ function LogsContent() {
 
   useEffect(() => {
     void loadLogs();
-  }, [type, startDate, endDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, startDate, endDate, userId, userEmail]);
 
   return (
     <section className="space-y-5">
@@ -156,6 +188,7 @@ function LogsContent() {
           <Select value={type} onValueChange={setType}>
             <SelectTrigger className="h-10 w-[150px] rounded-xl border-stone-200 bg-white"><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">全部类型</SelectItem>
               <SelectItem value={LogType.Call}>调用日志</SelectItem>
               <SelectItem value={LogType.Account}>账号管理日志</SelectItem>
               <SelectItem value={LogType.Auth}>安全日志（登录/退出/注册）</SelectItem>
@@ -173,6 +206,29 @@ function LogsContent() {
           </Button>
         </div>
       </div>
+
+      {userId || userEmail ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white/90 px-5 py-3 shadow-sm">
+          <div className="flex items-center gap-2 text-sm text-stone-700">
+            <UserRound className="size-4 shrink-0 text-stone-500" />
+            <span>
+              正在查看用户 <span className="font-semibold text-stone-900">{userEmail || `ID ${userId}`}</span> 的全部日志
+            </span>
+          </div>
+          <Button
+            variant="ghost"
+            className="h-8 shrink-0 rounded-lg px-3 text-stone-500"
+            onClick={() => {
+              setUserId("");
+              setUserEmail("");
+              urlUserFilterRef.current = { userId: "", userEmail: "" };
+            }}
+          >
+            <FilterX className="size-4" />
+            清除用户筛选
+          </Button>
+        </div>
+      ) : null}
 
       <Card className="overflow-hidden rounded-2xl border-white/80 bg-white/90 shadow-sm">
         <CardContent className="p-0">

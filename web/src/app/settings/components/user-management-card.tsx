@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Ban, CheckCircle2, Coins, LoaderCircle, Plus, Trash2, UserRound } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Ban, CheckCircle2, Coins, FileText, LoaderCircle, Plus, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,23 @@ function formatDateTime(value?: string) {
   }).format(date);
 }
 
+function formatDateTimeFull(value?: string) {
+  if (!value) {
+    return "—";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function formatQuota(user: AuthUser) {
   if (user.quota_total < 0) {
     return "不限量";
@@ -51,6 +69,7 @@ function formatQuota(user: AuthUser) {
 }
 
 export function UserManagementCard() {
+  const router = useRouter();
   const didLoadRef = useRef(false);
   const [items, setItems] = useState<AuthUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -242,7 +261,7 @@ export function UserManagementCard() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-stone-200">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[1100px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-stone-200 bg-stone-50 text-xs text-stone-500">
                     <th className="px-4 py-3 font-medium">邮箱</th>
@@ -250,6 +269,8 @@ export function UserManagementCard() {
                     <th className="px-4 py-3 font-medium">额度（剩余/总量）</th>
                     <th className="px-4 py-3 font-medium">状态</th>
                     <th className="px-4 py-3 font-medium">创建时间</th>
+                    <th className="px-4 py-3 font-medium">登录时间</th>
+                    <th className="px-4 py-3 font-medium">登录IP</th>
                     <th className="px-4 py-3 text-right font-medium">操作</th>
                   </tr>
                 </thead>
@@ -277,8 +298,26 @@ export function UserManagementCard() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-stone-500">{formatDateTime(user.created_at)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-stone-500">{formatDateTimeFull(user.last_login_at)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-stone-500">{user.last_login_ip || "—"}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-8 rounded-lg px-2 text-xs text-stone-600"
+                            disabled={pendingIds.has(user.id)}
+                            onClick={() => {
+                              const params = new URLSearchParams();
+                              params.set("user_id", user.id);
+                              if (user.email) {
+                                params.set("email", user.email);
+                              }
+                              router.push(`/logs?${params.toString()}`);
+                            }}
+                          >
+                            <FileText className="size-3.5" /> 日志
+                          </Button>
                           <Button
                             type="button"
                             variant="ghost"
@@ -353,7 +392,7 @@ export function UserManagementCard() {
                   ))}
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-stone-400">
+                      <td colSpan={8} className="px-4 py-8 text-center text-stone-400">
                         暂无用户，点击右上角「新建用户」创建
                       </td>
                     </tr>

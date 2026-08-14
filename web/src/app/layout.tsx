@@ -5,8 +5,8 @@ import { ThemeScript } from "@/components/theme-script";
 import { TopNav } from "@/components/top-nav";
 
 export const metadata: Metadata = {
-  title: "ChatGPT 号池管理",
-  description: "ChatGPT account pool management dashboard",
+  title: "chatgpt2api",
+  description: "OpenAI 兼容的图片生成 / 聊天 API 代理服务",
 };
 
 export const viewport: Viewport = {

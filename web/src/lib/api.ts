@@ -362,6 +362,8 @@ export type AuthUser = {
   last_checkin_date: string;
   checkin_streak: number;
   total_checkins: number;
+  last_login_at: string;
+  last_login_ip: string;
 };
 
 export type StreakBonus = {
@@ -1144,11 +1146,13 @@ export async function deleteToTarget(targetFreeMb: number) {
   );
 }
 
-export async function fetchSystemLogs(filters: { type?: string; start_date?: string; end_date?: string }) {
+export async function fetchSystemLogs(filters: { type?: string; start_date?: string; end_date?: string; user_id?: string; email?: string }) {
   const params = new URLSearchParams();
   if (filters.type) params.set("type", filters.type);
   if (filters.start_date) params.set("start_date", filters.start_date);
   if (filters.end_date) params.set("end_date", filters.end_date);
+  if (filters.user_id) params.set("user_id", filters.user_id);
+  if (filters.email) params.set("email", filters.email);
   return httpRequest<{ items: SystemLog[] }>(`/api/logs${params.toString() ? `?${params.toString()}` : ""}`);
 }
 

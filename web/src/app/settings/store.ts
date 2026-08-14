@@ -235,7 +235,7 @@ function normalizeConfig(config: SettingsConfig): SettingsConfig {
     registration_bonus_quota: Number(config.registration_bonus_quota || 0),
     checkin_bonus_quota: Number(config.checkin_bonus_quota || 0),
     checkin_streak_bonuses: normalizeStreakBonuses(config.checkin_streak_bonuses),
-    site_title: String(config.site_title || "ChatGPT 号池管理"),
+    site_title: String(config.site_title || "chatgpt2api"),
     smtp: {
       enabled: Boolean(config.smtp?.enabled),
       host: String(config.smtp?.host || ""),
@@ -551,7 +551,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         registration_bonus_quota: Math.max(0, Number(config.registration_bonus_quota) || 0),
         checkin_bonus_quota: Math.max(0, Number(config.checkin_bonus_quota) || 0),
         checkin_streak_bonuses: normalizeStreakBonuses(config.checkin_streak_bonuses),
-        site_title: String(config.site_title || "ChatGPT 号池管理").trim() || "ChatGPT 号池管理",
+        site_title: String(config.site_title || "chatgpt2api").trim() || "chatgpt2api",
         smtp: {
           enabled: Boolean(config.smtp?.enabled),
           host: String(config.smtp?.host || "").trim(),

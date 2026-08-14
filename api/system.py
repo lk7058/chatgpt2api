@@ -147,9 +147,22 @@ def create_router(app_version: str) -> APIRouter:
         return get_image_download_response(image_path)
 
     @router.get("/api/logs")
-    async def get_logs(type: str = "", start_date: str = "", end_date: str = "", authorization: str | None = Header(default=None)):
+    async def get_logs(
+        type: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        user_id: str = "",
+        email: str = "",
+        authorization: str | None = Header(default=None),
+    ):
         require_admin(authorization)
-        items = log_service.list(type=type.strip(), start_date=start_date.strip(), end_date=end_date.strip())
+        items = log_service.list(
+            type=type.strip(),
+            start_date=start_date.strip(),
+            end_date=end_date.strip(),
+            user_id=user_id.strip(),
+            email=email.strip(),
+        )
         # 调用日志注入用户邮箱：按 detail.key_id（用户 id）查用户
         from services.user_service import user_service
 
@@ -350,9 +363,8 @@ def create_router(app_version: str) -> APIRouter:
 
     @router.get("/health", response_model=None)
     async def health_dashboard(format: str = Query(default="html"), authorization: str | None = Header(default=None)):
-        # JSON 模式泄露号池/存储情报，仅管理员可访问；HTML 模式保留公开（监控探针用）
-        if format == "json":
-            require_admin(authorization)
+        # 号池/存储情报仅管理员可访问：移除公开监控页（HTML 与 JSON 模式均需登录）
+        require_admin(authorization)
         from services.account_service import account_service as acct_svc
         stats = acct_svc.get_stats()
         storage = config.get_storage_backend()

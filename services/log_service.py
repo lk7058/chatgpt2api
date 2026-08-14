@@ -49,7 +49,15 @@ class LogService:
         return json.dumps(item, ensure_ascii=False, separators=(",", ":"))
 
     @staticmethod
-    def _matches_filters(item: dict[str, Any], *, type: str = "", start_date: str = "", end_date: str = "") -> bool:
+    def _matches_filters(
+        item: dict[str, Any],
+        *,
+        type: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        user_id: str = "",
+        email: str = "",
+    ) -> bool:
         t = str(item.get("time") or "")
         day = t[:10]
         if type and item.get("type") != type:
@@ -58,6 +66,20 @@ class LogService:
             return False
         if end_date and day > end_date:
             return False
+        if user_id or email:
+            detail = item.get("detail")
+            if not isinstance(detail, dict):
+                return False
+            key_id = str(detail.get("key_id") or "")
+            detail_email = str(detail.get("email") or "").lower()
+            by_user = (not user_id) or key_id == user_id
+            by_email = (not email) or detail_email == email.lower()
+            if user_id and email:
+                # 同时传 user_id 与 email 时按“该用户”聚合：调用日志用 key_id、登录/签到/额度日志用邮箱，任一命中即可
+                if not (by_user or by_email):
+                    return False
+            elif not (by_user and by_email):
+                return False
         return True
 
     def add(self, type: str, summary: str = "", detail: dict[str, Any] | None = None, **data: Any) -> None:
@@ -71,7 +93,15 @@ class LogService:
         with self.path.open("a", encoding="utf-8") as file:
             file.write(self._serialize_item(item) + "\n")
 
-    def list(self, type: str = "", start_date: str = "", end_date: str = "", limit: int = 200) -> list[dict[str, Any]]:
+    def list(
+        self,
+        type: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        limit: int = 200,
+        user_id: str = "",
+        email: str = "",
+    ) -> list[dict[str, Any]]:
         if not self.path.exists():
             return []
         items: list[dict[str, Any]] = []
@@ -80,7 +110,14 @@ class LogService:
             item = self._parse_line(lines[line_number], line_number)
             if item is None:
                 continue
-            if not self._matches_filters(item, type=type, start_date=start_date, end_date=end_date):
+            if not self._matches_filters(
+                item,
+                type=type,
+                start_date=start_date,
+                end_date=end_date,
+                user_id=user_id,
+                email=email,
+            ):
                 continue
             items.append(item)
             if len(items) >= limit:

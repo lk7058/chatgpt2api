@@ -268,6 +268,8 @@ def create_router() -> APIRouter:
                 log_service.add("auth", "登录失败", {"email": email, "ip": client_ip_addr, "status": "failed"})
                 raise HTTPException(status_code=401, detail={"error": "邮箱或密码错误"})
             login_limiter.clear(limiter_key)
+            # 记录登录时间与 IP（用于用户管理展示）
+            user_service.record_login(user["id"], client_ip_addr)
             log_service.add("auth", "登录成功", {"email": email, "ip": client_ip_addr, "status": "success"})
             token = user_service.create_session(user["id"])
             return {

@@ -126,13 +126,13 @@ export function TopNav() {
         if (!active) {
           return;
         }
-        const title = data.site_title || "ChatGPT 号池管理";
+        const title = data.site_title || "chatgpt2api";
         setSiteTitle(data.site_title || "");
         document.title = title;
       })
       .catch(() => {
         if (active) {
-          document.title = "ChatGPT 号池管理";
+          document.title = "chatgpt2api";
         }
       });
     return () => {

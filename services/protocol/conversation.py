@@ -1318,8 +1318,6 @@ def _generate_single_image(
 
     while True:
         try:
-            if request.progress_callback:
-                request.progress_callback("getting_account")
             plan_type, _ = split_image_model(request.model)
             codex_model = is_codex_image_model(request.model)
             token = account_service.get_available_access_token(
@@ -1327,6 +1325,9 @@ def _generate_single_image(
                 source_type="codex" if codex_model else None,
                 plan_types=("plus", "team", "pro") if codex_model and not plan_type else None,
             )
+            # 排队（等待可用账号并发槽位）结束后才上报进度：排队期间任务保持「排队中」状态
+            if request.progress_callback:
+                request.progress_callback("getting_account")
         except RuntimeError as exc:
             raise ImageGenerationError(str(exc) or "image generation failed", account_email=account_email) from exc
 

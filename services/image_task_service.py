@@ -347,23 +347,36 @@ class ImageTaskService:
         started = time.time()
         # 阶段耗时记录：每个阶段开始时间戳
         phase_marks: list[dict[str, Any]] = [{"phase": PHASE_STARTING, "ts": started}]
-        self._update_task(
-            key,
-            status=TASK_STATUS_RUNNING,
-            error="",
-            progress=PHASE_STARTING,
-            progress_step="",
-            started_ts=started,
-        )
+        # 排队中保持 QUEUED 状态，直到真正开始执行（首次进度回调）才转 RUNNING，
+        # 这样「排队中」的任务在管理员任务管理/用户侧均可读取与取消
+        task_marked_running = False
+
         # 创建进度回调，每个步骤完成后更新任务状态
         def progress_callback(step: str) -> None:
+            nonlocal task_marked_running
             phase = STEP_TO_PHASE.get(step, PHASE_GENERATING)
             now = time.time()
             if step == "image_stream_resolve_start":
-                self._update_task(key, started_ts=now)
+                self._update_task(key, started_ts=now, persist=False)
+            if not task_marked_running:
+                # 已被取消的排队任务：不再转 RUNNING，保持已取消状态
+                with self._lock:
+                    if self._tasks.get(key, {}).get("status") == TASK_STATUS_CANCELLED:
+                        task_marked_running = True
+                        return
+                task_marked_running = True
+                self._update_task(
+                    key,
+                    status=TASK_STATUS_RUNNING,
+                    error="",
+                    progress=phase,
+                    progress_step=step,
+                    started_ts=now,
+                )
             if phase_marks[-1]["phase"] != phase:
                 phase_marks.append({"phase": phase, "ts": now})
-            self._update_task(key, progress=phase, progress_step=step)
+            # 进度细节只更新内存，不落盘（避免频繁全量写文件）
+            self._update_task(key, progress=phase, progress_step=step, persist=False)
 
         def build_phases(end_ts: float) -> list[dict[str, Any]]:
             result: list[dict[str, Any]] = []
@@ -476,6 +489,10 @@ class ImageTaskService:
                 phases=phases,
             )
         except Exception as exc:
+            # 排队/执行期间任务已被取消：保持已取消状态，不覆盖为 error
+            with self._lock:
+                if self._tasks.get(key, {}).get("status") == TASK_STATUS_CANCELLED:
+                    return
             error_message = str(exc) or "image task failed"
             account_email = _clean(getattr(exc, "account_email", ""))
             conversation_id = _clean(getattr(exc, "conversation_id", ""))
@@ -543,7 +560,7 @@ class ImageTaskService:
         except Exception:
             pass
 
-    def _update_task(self, key: str, **updates: Any) -> None:
+    def _update_task(self, key: str, persist: bool = True, **updates: Any) -> None:
         with self._lock:
             task = self._tasks.get(key)
             if task is None:
@@ -551,7 +568,9 @@ class ImageTaskService:
             task.update(updates)
             task["updated_at"] = _now_iso()
             task["updated_ts"] = time.time()
-            self._save_locked()
+            # 进度细节（progress/progress_step）只更新内存，不落盘，避免频繁全量写文件
+            if persist:
+                self._save_locked()
 
     def _load_locked(self) -> dict[str, dict[str, Any]]:
         if not self.path.exists():
@@ -604,7 +623,14 @@ class ImageTaskService:
         return tasks
 
     def _save_locked(self) -> None:
-        items = sorted(self._tasks.values(), key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+        # base64 图片数据（data 字段）不落盘：内存保留供前端轮询，文件只存元数据，
+        # 避免 image_tasks.json 持续膨胀导致每次全量写越来越慢（任务队列被 IO 阻塞）
+        items = []
+        for task in self._tasks.values():
+            item = dict(task)
+            item.pop("data", None)
+            items.append(item)
+        items.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
         tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp_path.write_text(json.dumps({"tasks": items}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         tmp_path.replace(self.path)

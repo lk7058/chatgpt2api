@@ -127,6 +127,8 @@ class UserService:
             "last_checkin_date": self._clean(raw.get("last_checkin_date")),
             "checkin_streak": int(raw.get("checkin_streak", 0) or 0),
             "total_checkins": int(raw.get("total_checkins", 0) or 0),
+            "last_login_at": self._clean(raw.get("last_login_at")),
+            "last_login_ip": self._clean(raw.get("last_login_ip")),
         }
 
     @staticmethod
@@ -147,6 +149,8 @@ class UserService:
             "last_checkin_date": user.get("last_checkin_date") or "",
             "checkin_streak": user.get("checkin_streak", 0),
             "total_checkins": user.get("total_checkins", 0),
+            "last_login_at": user.get("last_login_at") or "",
+            "last_login_ip": user.get("last_login_ip") or "",
         }
 
     # ── 查询 ────────────────────────────────────────────────
@@ -656,6 +660,20 @@ class UserService:
             sessions = self._load_sessions()
             sessions = {h: s for h, s in sessions.items() if s.get("user_id") != user_id}
             self._save_sessions(sessions)
+
+    def record_login(self, user_id: str, ip: str = "") -> None:
+        """记录用户最近一次登录时间与 IP。"""
+        user_id = self._clean(user_id)
+        if not user_id:
+            return
+        with self._lock:
+            user = self._users.get(user_id)
+            if user is None:
+                return
+            user["last_login_at"] = _now_iso()
+            user["last_login_ip"] = self._clean(ip)
+            user["updated_at"] = _now_iso()
+            self._save()
 
     # ── 签到 ────────────────────────────────────────────────
 
