@@ -506,6 +506,7 @@ export async function sendRegisterEmailCode(email: string, captchaId = "", captc
 
 export type PublicSettings = {
   site_title: string;
+  allowed_email_domains: string[];
   turnstile_site_key: string;
   turnstile_enabled: boolean;
 };

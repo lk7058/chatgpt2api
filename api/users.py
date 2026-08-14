@@ -95,6 +95,7 @@ def create_router() -> APIRouter:
         turnstile = config.get_public_turnstile_settings()
         return {
             "site_title": config.site_title,
+            "allowed_email_domains": config.allowed_email_domains,
             "turnstile_site_key": str(turnstile.get("site_key") or "") if turnstile.get("enabled") else "",
             "turnstile_enabled": bool(turnstile.get("enabled")),
         }
@@ -107,6 +108,15 @@ def create_router() -> APIRouter:
         email = body.email.strip().lower()
         if not email or "@" not in email:
             raise HTTPException(status_code=400, detail={"error": "请填写有效邮箱"})
+        # 邮箱域名白名单限制
+        allowed_domains = config.allowed_email_domains
+        if allowed_domains:
+            domain = email.split("@", 1)[1] if "@" in email else ""
+            if domain not in allowed_domains:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error": f"仅支持 {', '.join(allowed_domains)} 邮箱注册"},
+                )
         # 验证码发送冷却（按 IP 限流）
         client_ip = request.client.host if request.client else ""
         if code_limiter.is_blocked(client_ip):

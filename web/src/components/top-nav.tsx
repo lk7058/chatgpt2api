@@ -53,6 +53,7 @@ export function TopNav() {
   const [session, setSession] = useState<StoredAuthSession | null | undefined>(undefined);
   const [thirdPartyApps, setThirdPartyApps] = useState<ThirdPartyAppsSettings | null>(null);
   const [isCanvasDialogOpen, setIsCanvasDialogOpen] = useState(false);
+  const [siteTitle, setSiteTitle] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -118,15 +119,26 @@ export function TopNav() {
   };
 
   useEffect(() => {
-    // 动态设置网站标题（管理员可配置）
+    // 动态设置网站标题（管理员可配置）；依赖 pathname：客户端路由切换后 Next.js 会重置标题，需重新设置
+    let active = true;
     fetchPublicSettings()
       .then((data) => {
-        if (data.site_title) {
-          document.title = data.site_title;
+        if (!active) {
+          return;
         }
+        const title = data.site_title || "ChatGPT 号池管理";
+        setSiteTitle(data.site_title || "");
+        document.title = title;
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        if (active) {
+          document.title = "ChatGPT 号池管理";
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
 
   const [checkinStatus, setCheckinStatus] = useState<{ checkedToday: boolean; bonus: number; streak: number } | null>(null);
   const [isCheckinPending, setIsCheckinPending] = useState(false);
@@ -227,7 +239,7 @@ export function TopNav() {
               </SheetTrigger>
               <SheetContent side="left">
                 <SheetHeader>
-                  <SheetTitle>chatgpt2api</SheetTitle>
+                  <SheetTitle>{siteTitle || "chatgpt2api"}</SheetTitle>
                   <span className="text-xs text-stone-500 dark:text-stone-400">{roleLabel} · {displayName}</span>
                 </SheetHeader>
                 <nav className="mt-8 flex flex-col gap-1">
@@ -270,7 +282,7 @@ export function TopNav() {
               href="/"
               className="shrink-0 py-1 text-[15px] font-bold tracking-tight text-stone-950 transition hover:text-stone-700 dark:text-stone-50 dark:hover:text-white"
             >
-              chatgpt2api
+              {siteTitle || "chatgpt2api"}
             </Link>
             <HeaderActions className="ml-auto sm:hidden" showGithubText={false} />
           </div>

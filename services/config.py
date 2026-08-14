@@ -800,6 +800,21 @@ class ConfigStore:
         return value or "ChatGPT 号池管理"
 
     @property
+    def allowed_email_domains(self) -> list[str]:
+        """允许注册的邮箱域名白名单（空列表=不限）。例如 ["ice11.cn", "gmail.com"]。"""
+        raw = self.data.get("allowed_email_domains")
+        if isinstance(raw, str):
+            raw = [part.strip() for part in raw.replace("，", ",").split(",") if part.strip()]
+        if not isinstance(raw, list):
+            return []
+        domains: list[str] = []
+        for item in raw:
+            value = str(item or "").strip().lower().lstrip("@")
+            if value:
+                domains.append(value)
+        return domains
+
+    @property
     def smtp_settings(self) -> dict[str, object]:
         return _normalize_smtp(self.data.get("smtp"))
 
@@ -921,6 +936,7 @@ class ConfigStore:
         data["checkin_bonus_quota"] = self.checkin_bonus_quota
         data["checkin_streak_bonuses"] = self.checkin_streak_bonuses
         data["site_title"] = self.site_title
+        data["allowed_email_domains"] = self.allowed_email_domains
         data["image_local_download_enabled"] = self.image_local_download_enabled
         data["image_local_retention_days"] = self.image_local_retention_days
         data["image_prefer_b64_json"] = self.image_prefer_b64_json

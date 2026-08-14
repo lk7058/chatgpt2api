@@ -31,15 +31,17 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
   const { isCheckingAuth } = useRedirectIfAuthenticated();
 
-  // 探测注册开关和 Turnstile 配置（一次 fetchPublicSettings，失败时回退旧接口）
+  // 探测注册开关、Turnstile 配置与邮箱域名白名单（一次 fetchPublicSettings，失败时回退旧接口）
   useEffect(() => {
     fetchPublicSettings()
       .then((data) => {
         setRegistrationEnabled(true);
         setTurnstileSiteKey(data.turnstile_site_key);
         setTurnstileEnabled(data.turnstile_enabled);
+        setAllowedDomains(data.allowed_email_domains || []);
       })
       .catch(() => {
         // 失败时尝试旧接口
@@ -253,6 +255,11 @@ export default function LoginPage() {
                     ? "注册后即可使用生成功能，额度由管理员分配。"
                     : "通过绑定邮箱重置密码，验证码 10 分钟内有效。"}
               </p>
+              {isRegister && allowedDomains.length > 0 ? (
+                <p className="text-xs leading-5 text-amber-600">
+                  仅支持以下邮箱域名注册：{allowedDomains.map((domain) => `@${domain}`).join("、")}
+                </p>
+              ) : null}
             </div>
           </div>
 
