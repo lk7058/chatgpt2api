@@ -18,6 +18,7 @@ export function SMTPCard() {
   const isSavingConfig = useSettingsStore((state) => state.isSavingConfig);
   const setSMTPField = useSettingsStore((state) => state.setSMTPField);
   const setTurnstileField = useSettingsStore((state) => state.setTurnstileField);
+  const setAllowedEmailDomains = useSettingsStore((state) => state.setAllowedEmailDomains);
   const saveConfig = useSettingsStore((state) => state.saveConfig);
   const [testEmail, setTestEmail] = useState("");
   const [isTesting, setIsTesting] = useState(false);
@@ -120,6 +121,19 @@ export function SMTPCard() {
           />
           使用 SSL/TLS 加密连接（465 端口通常勾选；587 端口使用 STARTTLS 时取消勾选）
         </label>
+
+        <div className="space-y-2">
+          <label className="text-sm text-stone-700">允许注册的邮箱域名（可选）</label>
+          <Input
+            value={Array.isArray(config?.allowed_email_domains) ? config.allowed_email_domains.join(", ") : String(config?.allowed_email_domains || "")}
+            onChange={(event) => setAllowedEmailDomains(event.target.value)}
+            placeholder="例如：ice11.cn, gmail.com（留空 = 不限制）"
+            className="h-10 rounded-xl border-stone-200 bg-white"
+          />
+          <p className="text-xs leading-5 text-stone-500">
+            注册时仅允许这些邮箱域名，多个用英文逗号分隔；留空表示不限域名。
+          </p>
+        </div>
 
         <div className="flex flex-wrap items-end gap-3">
           <Button className="h-10 rounded-xl bg-stone-950 px-5 text-white hover:bg-stone-800" onClick={() => void handleSave()} disabled={isSavingConfig}>

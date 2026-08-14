@@ -29,6 +29,12 @@ export default function RootLayout({
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <ThemeScript />
+        {/* 首屏即设置网站标题：HTML 解析阶段同步读取公开配置，避免先显示默认标题 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var r=new XMLHttpRequest();r.open("GET","/api/public-settings",false);r.send();if(r.status===200){var d=JSON.parse(r.responseText);if(d&&d.site_title){document.title=d.site_title;}}}catch(e){}})();`,
+          }}
+        />
       </head>
       <body
         className="antialiased"

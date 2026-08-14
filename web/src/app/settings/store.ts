@@ -346,6 +346,7 @@ type SettingsStore = {
   setImageLocalDownloadEnabled: (value: boolean) => void;
   setImagePreferB64Json: (value: boolean) => void;
   setImageDownloadProxy: (value: string) => void;
+  setAllowedEmailDomains: (value: string) => void;
   setImageLocalRetentionDays: (value: string) => void;
   setImagePollTimeoutSecs: (value: string) => void;
   setImageAccountConcurrency: (value: string) => void;
@@ -627,6 +628,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
 
   setImageDownloadProxy: (value) => {
     set((state) => state.config ? { config: { ...state.config, image_download_proxy: value } } : {});
+  },
+
+  setAllowedEmailDomains: (value) => {
+    set((state) => state.config ? { config: { ...state.config, allowed_email_domains: value } } : {});
   },
 
   setImagePollTimeoutSecs: (value) => {
