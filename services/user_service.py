@@ -671,6 +671,11 @@ class UserService:
         bonus = max(0, int(config.checkin_bonus_quota))
         streak_bonuses = config.checkin_streak_bonuses
         streak = int(user.get("checkin_streak", 0) or 0)
+        last = str(user.get("last_checkin_date") or "")
+        # 断签修正：最后一次签到既不是今天也不是昨天 → 连续签到已中断，显示 0
+        # （下次签到会从 1 重新开始，避免 UI 上残留旧连续天数）
+        if last and last != today and last != _date_days_ago(1):
+            streak = 0
         next_streak_bonus = next(
             (item for item in streak_bonuses if int(item.get("days") or 0) > streak),
             None,
