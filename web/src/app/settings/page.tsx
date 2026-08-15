@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useRef } from "react";
-import { Code2, CloudDownload, DatabaseBackup, Flame, KeyRound, LayoutGrid, ListX, LoaderCircle, Mail, Megaphone, Plug, Server, SlidersHorizontal, Ticket, Trash2, UserRound } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthGuard } from "@/lib/use-auth-guard";
@@ -35,44 +35,22 @@ const ImportBrowserDialog = dynamic(() => import("./components/import-browser-di
 
 import { SettingsHeader } from "./components/settings-header";
 
-type SettingsTab = { value: string; title: string; icon: typeof SlidersHorizontal };
-
-const settingsGroups: { title: string; items: SettingsTab[] }[] = [
-  {
-    title: "常规",
-    items: [
-      { value: "basic", title: "基础配置", icon: SlidersHorizontal },
-      { value: "announce", title: "公告", icon: Megaphone },
-      { value: "smtp", title: "邮箱设置", icon: Mail },
-      { value: "backup", title: "备份", icon: DatabaseBackup },
-    ],
-  },
-  {
-    title: "用户与额度",
-    items: [
-      { value: "users", title: "用户管理", icon: UserRound },
-      { value: "redeem", title: "充值卡", icon: Ticket },
-      { value: "keys", title: "用户密钥", icon: KeyRound },
-    ],
-  },
-  {
-    title: "账号池与集成",
-    items: [
-      { value: "third-party", title: "第三方 API", icon: Plug },
-      { value: "proxy", title: "FlareSolverr", icon: Flame },
-      { value: "cpa", title: "CPA", icon: CloudDownload },
-      { value: "sub2api", title: "Sub2API", icon: Server },
-    ],
-  },
-  {
-    title: "系统",
-    items: [
-      { value: "api-docs", title: "接口接入", icon: Code2 },
-      { value: "canvas", title: "画布入口", icon: LayoutGrid },
-      { value: "cleanup", title: "数据清理", icon: Trash2 },
-      { value: "tasks", title: "任务管理", icon: ListX },
-    ],
-  },
+const settingsTabs = [
+  { value: "basic", title: "基础配置" },
+  { value: "users", title: "用户管理" },
+  { value: "third-party", title: "第三方 API" },
+  { value: "redeem", title: "充值卡" },
+  { value: "smtp", title: "邮箱设置" },
+  { value: "backup", title: "备份" },
+  { value: "keys", title: "用户密钥" },
+  { value: "api-docs", title: "接口接入" },
+  { value: "canvas", title: "画布入口" },
+  { value: "proxy", title: "FlareSolverr" },
+  { value: "cpa", title: "CPA" },
+  { value: "sub2api", title: "Sub2API" },
+  { value: "cleanup", title: "数据清理" },
+  { value: "announce", title: "公告" },
+  { value: "tasks", title: "任务管理" },
 ];
 
 function SettingsDataController() {
@@ -124,33 +102,16 @@ function SettingsPageContent() {
     <>
       <SettingsDataController />
       <SettingsHeader />
-      <Tabs defaultValue="basic" className="items-start gap-5 lg:flex-row">
-        {/* 左侧分组侧边栏：宽屏纵向分组导航，窄屏横向滚动 */}
-        <div className="w-full shrink-0 lg:w-60">
-          <div className="overflow-x-auto rounded-xl border border-white/80 bg-white/90 px-2 py-2 shadow-sm backdrop-blur lg:sticky lg:top-3 lg:max-h-[calc(100vh-3.5rem)] lg:overflow-y-auto">
-            <TabsList variant="line" className="h-auto w-full min-w-max flex-row items-stretch gap-0.5 p-1 lg:min-w-0 lg:flex-col lg:p-2">
-              {settingsGroups.map((group) => (
-                <div key={group.title} className="contents lg:block">
-                  <div className="hidden px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wider text-stone-400 uppercase lg:block">
-                    {group.title}
-                  </div>
-                  {group.items.map((tab) => (
-                    <TabsTrigger
-                      key={tab.value}
-                      value={tab.value}
-                      className="gap-2 rounded-lg px-3 py-2 text-sm after:hidden data-[state=active]:bg-stone-950 data-[state=active]:text-white hover:bg-stone-100 lg:flex-none lg:justify-start dark:data-[state=active]:bg-white dark:data-[state=active]:text-stone-950 dark:hover:bg-white/10"
-                    >
-                      <tab.icon className="size-4 shrink-0" />
-                      <span className="whitespace-nowrap">{tab.title}</span>
-                    </TabsTrigger>
-                  ))}
-                </div>
-              ))}
-            </TabsList>
-          </div>
+      <Tabs defaultValue="basic" className="space-y-4">
+        <div className="sticky top-3 z-20 overflow-x-auto rounded-xl border border-white/80 bg-white/90 px-3 py-2 shadow-sm backdrop-blur">
+          <TabsList variant="line" className="min-w-max justify-start">
+            {settingsTabs.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value} className="px-4">
+                {tab.title}
+              </TabsTrigger>
+            ))}
+          </TabsList>
         </div>
-
-        {/* 右侧内容区 */}
         <TabsContent value="basic">
           <ConfigCard />
         </TabsContent>
