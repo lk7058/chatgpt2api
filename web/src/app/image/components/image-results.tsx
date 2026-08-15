@@ -408,16 +408,17 @@ export function ImageResults({
                             <p className="text-[10px] leading-4 text-stone-400 sm:text-xs">
                               {imageStatusLabel}
                             </p>
-                            {image.taskId ? (
-                              <p
-                                className="max-w-full truncate font-mono text-[9px] leading-4 text-stone-400/80 sm:text-[10px]"
-                                title={image.taskId}
-                              >
-                                ID: {image.taskId}
-                              </p>
-                            ) : null}
                           </div>
                           </div>
+                          {/* 任务 ID：图片模块下方、生成计时上方 */}
+                          {image.taskId ? (
+                            <div
+                              className="truncate px-0.5 pt-1 font-mono text-[9px] leading-4 text-stone-400/80 sm:px-3 sm:pt-2 sm:text-[10px]"
+                              title={image.taskId}
+                            >
+                              ID: {image.taskId}
+                            </div>
+                          ) : null}
                           {elapsedDisplay != null && (
                             <div className="px-0.5 py-1 text-[10px] text-stone-400 sm:px-3 sm:py-3 sm:text-xs">{elapsedDisplay}</div>
                           )}
