@@ -95,6 +95,11 @@ function parseImageSize(size: string) {
 
 const activeConversationQueueIds = new Set<string>();
 let pollAbortController: AbortController | null = null;
+// 管理员账号池额度短缓存：避免焦点切换/生成完成时重复拉取账号池（减少大请求）
+let accountsQuotaCache: { expiresAt: number; text: string } | null = null;
+// 图片模型列表缓存（2 分钟 TTL），避免每次进入生图页重复请求 /v1/models
+const MODELS_CACHE_KEY = "chatgpt2api:image-models-cache";
+const MODELS_CACHE_TTL_MS = 2 * 60 * 1000;
 
 function getResultsDistanceFromBottom(element: HTMLElement) {
   return element.scrollHeight - element.scrollTop - element.clientHeight;
@@ -823,9 +828,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     let cancelled = false;
 
     const loadImageModels = async () => {
-      try {
-        const data = await fetchModels();
-        const available = filterImageModels(Array.isArray(data.data) ? data.data : []);
+      const applyModels = (available: string[]) => {
         if (cancelled || available.length === 0) {
           return;
         }
@@ -837,6 +840,32 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
           }
           return normalizeStoredImageModel(storedModel, available);
         });
+      };
+      // 读缓存（2 分钟 TTL），避免每次进入生图页重复请求 /v1/models
+      if (typeof window !== "undefined") {
+        try {
+          const cached = JSON.parse(window.localStorage.getItem(MODELS_CACHE_KEY) || "null") as
+            | { ts: number; models: string[] }
+            | null;
+          if (cached && Array.isArray(cached.models) && Date.now() - cached.ts < MODELS_CACHE_TTL_MS) {
+            applyModels(cached.models);
+            return;
+          }
+        } catch {
+          // 缓存损坏忽略，走正常请求
+        }
+      }
+      try {
+        const data = await fetchModels();
+        const available = filterImageModels(Array.isArray(data.data) ? data.data : []);
+        applyModels(available);
+        if (available.length > 0 && typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem(MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models: available }));
+          } catch {
+            // 存储失败忽略
+          }
+        }
       } catch {
         if (!cancelled) {
           setImageModels(["gpt-image-2"]);
@@ -861,12 +890,20 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
         setAvailableQuota(userQuota);
         return;
       }
-      // 管理员显示：账号池额度 + 自己额度
+      // 管理员显示：账号池额度 + 自己额度（30 秒短缓存，避免焦点/生成完成时重复拉取账号池）
+      const now = Date.now();
+      if (accountsQuotaCache && accountsQuotaCache.expiresAt > now) {
+        setAvailableQuota(accountsQuotaCache.text);
+        return;
+      }
       try {
         const data = await fetchAccounts();
         const poolQuota = formatAvailableQuota(data.items);
-        setAvailableQuota(`${poolQuota}（我 ${userQuota}）`);
+        const text = `${poolQuota}（我 ${userQuota}）`;
+        accountsQuotaCache = { expiresAt: now + 30_000, text };
+        setAvailableQuota(text);
       } catch {
+        accountsQuotaCache = null;
         setAvailableQuota(userQuota);
       }
     } catch {
@@ -1471,6 +1508,8 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
 
         let consecutiveErrors = 0;
         const retryingTaskIdsRef = new Set<string>();
+        // 上次轮询是否全部仍处于排队中：排队中放慢轮询频率（3s），生成中加快（2s）
+        let allQueued = false;
         while (true) {
           const latestConversation = conversationsRef.current.find((conversation) => conversation.id === conversationId);
           const latestTurn = latestConversation?.turns.find((turn) => turn.id === activeTurn.id);
@@ -1482,10 +1521,13 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             break;
           }
 
-          await sleep(2000);
+          // 页面切到后台时大幅降频轮询（省请求），回到前台自动恢复
+          const pageHidden = typeof document !== "undefined" && document.hidden;
+          await sleep(pageHidden ? 8000 : allQueued ? 3000 : 2000);
           try {
             const taskList = await fetchImageTasks(loadingTaskIds);
             consecutiveErrors = 0;
+            allQueued = taskList.items.length > 0 && taskList.items.every((task) => task.status === "queued");
             if (taskList.items.length > 0) {
               // 检测是否有超时错误且需要显示重试按钮
               const timeoutTask = taskList.items.find(
@@ -1527,7 +1569,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             // 网络抖动/服务重启时轮询可能短暂失败：不要轻易把仍在运行的任务标记为失败。
             // 连续失败足够多次后暂停轮询（任务在后台继续，刷新页面或切回前台会恢复）。
             consecutiveErrors += 1;
-            if (consecutiveErrors >= 30) {
+            if (consecutiveErrors >= 8) {
               break;
             }
           }
