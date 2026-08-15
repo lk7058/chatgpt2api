@@ -955,6 +955,9 @@ export type AdminImageTask = {
   created_at: string;
   updated_at: string;
   owner_id?: string;
+  owner_email?: string;
+  quota_used?: number;
+  refunded?: boolean;
   cancel_reason?: string;
   progress?: string;
 };
@@ -968,6 +971,13 @@ export async function cancelAdminImageTasks(body: { task_ids?: string[]; all_tas
   return httpRequest<{ cancelled: number }>("/api/admin/image-tasks/cancel", {
     method: "POST",
     body,
+  });
+}
+
+// 管理员退还指定任务消耗的积分
+export async function refundAdminImageTask(taskId: string) {
+  return httpRequest<{ refunded: boolean; amount: number }>(`/api/admin/image-tasks/${encodeURIComponent(taskId)}/refund`, {
+    method: "POST",
   });
 }
 

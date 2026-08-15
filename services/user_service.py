@@ -396,7 +396,7 @@ class UserService:
                     pass
             return self._public(user)
 
-    def add_quota(self, user_id: str, amount: int, note: str = "管理员增加额度") -> dict[str, Any] | None:
+    def add_quota(self, user_id: str, amount: int, note: str = "管理员增加额度", source: str = "admin_grant") -> dict[str, Any] | None:
         """增加用户额度（记录收入流水）。"""
         user_id = self._clean(user_id)
         try:
@@ -423,7 +423,7 @@ class UserService:
                     record_type="income",
                     amount=amount,
                     balance_after=balance,
-                    source="admin_grant",
+                    source=source,
                     note=note,
                     email=str(user.get("email") or ""),
                 )

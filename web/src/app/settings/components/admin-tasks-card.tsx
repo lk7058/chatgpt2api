@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, ListX, RefreshCw, SquareX } from "lucide-react";
+import { LoaderCircle, ListX, RefreshCw, RotateCcw, SquareX } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cancelAdminImageTasks, fetchAdminImageTasks, type AdminImageTask } from "@/lib/api";
+import { cancelAdminImageTasks, fetchAdminImageTasks, refundAdminImageTask, type AdminImageTask } from "@/lib/api";
 
 const ACTIVE_STATUSES = new Set(["queued", "running"]);
 
@@ -51,6 +51,8 @@ export function AdminTasksCard() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmAll, setConfirmAll] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [refundTarget, setRefundTarget] = useState<AdminImageTask | null>(null);
+  const [isRefunding, setIsRefunding] = useState(false);
 
   const load = async (silent = false) => {
     if (!silent) {
@@ -133,6 +135,23 @@ export function AdminTasksCard() {
     }
   };
 
+  const handleRefund = async () => {
+    if (!refundTarget) {
+      return;
+    }
+    setIsRefunding(true);
+    try {
+      const result = await refundAdminImageTask(refundTarget.id);
+      toast.success(`已退还 ${result.amount} 积分`);
+      setRefundTarget(null);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "退还失败");
+    } finally {
+      setIsRefunding(false);
+    }
+  };
+
   const toggleAllActive = () => {
     const allActiveIds = activeItems.map((item) => item.id);
     const allSelected = allActiveIds.length > 0 && allActiveIds.every((id) => selected.has(id));
@@ -195,7 +214,7 @@ export function AdminTasksCard() {
           ) : null}
 
           <div className="overflow-x-auto rounded-xl border border-stone-100">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[960px] text-left text-sm">
               <thead>
                 <tr className="border-b border-stone-100 text-xs text-stone-400">
                   <th className="w-10 px-3 py-2"></th>
@@ -203,8 +222,10 @@ export function AdminTasksCard() {
                   <th className="px-3 py-2">用户</th>
                   <th className="px-3 py-2">类型</th>
                   <th className="px-3 py-2">模型</th>
+                  <th className="px-3 py-2">积分</th>
                   <th className="px-3 py-2">创建时间</th>
                   <th className="px-3 py-2">任务 ID</th>
+                  <th className="px-3 py-2">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -238,16 +259,40 @@ export function AdminTasksCard() {
                         {STATUS_LABELS[item.status] || item.status}
                       </span>
                     </td>
-                    <td className="max-w-[120px] truncate px-3 py-2 font-mono text-xs text-stone-500">{item.owner_id || "—"}</td>
+                    <td className="max-w-[160px] truncate px-3 py-2 text-stone-600">{item.owner_email || item.owner_id || "—"}</td>
                     <td className="px-3 py-2">{item.mode === "edit" ? "图生图" : "文生图"}</td>
                     <td className="px-3 py-2">{item.model || "—"}</td>
+                    <td className="px-3 py-2">
+                      {(item.quota_used ?? 0) > 0 ? (
+                        <span className="font-medium text-stone-700">{item.quota_used}</span>
+                      ) : (
+                        <span className="text-stone-300">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap text-xs text-stone-500">{formatTime(item.created_at)}</td>
                     <td className="max-w-[160px] truncate px-3 py-2 font-mono text-[11px] text-stone-400">{item.id}</td>
+                    <td className="px-3 py-2">
+                      {item.refunded ? (
+                        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] text-stone-500">已退还</span>
+                      ) : item.status === "success" && (item.quota_used ?? 0) > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-7 rounded-lg px-2 text-xs text-emerald-700"
+                          disabled={isRefunding}
+                          onClick={() => setRefundTarget(item)}
+                        >
+                          <RotateCcw className="size-3.5" /> 退还积分
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-stone-300">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-10 text-center text-sm text-stone-400">
+                    <td colSpan={9} className="px-3 py-10 text-center text-sm text-stone-400">
                       {isLoading ? "加载中..." : "暂无任务记录"}
                     </td>
                   </tr>
@@ -273,6 +318,29 @@ export function AdminTasksCard() {
             <Button className="rounded-xl bg-rose-600 text-white hover:bg-rose-700" onClick={() => void handleCancelAll()} disabled={isCancelling}>
               {isCancelling ? <LoaderCircle className="size-4 animate-spin" /> : null}
               确认取消
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 退还积分确认 */}
+      <Dialog open={refundTarget !== null} onOpenChange={(open) => { if (!open) setRefundTarget(null); }}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>确认退还该任务积分？</DialogTitle>
+            <DialogDescription>
+              将为用户 <span className="font-medium text-stone-900">{refundTarget?.owner_email || refundTarget?.owner_id || "—"}</span>
+              退还本任务消耗的 <span className="font-medium text-emerald-700">{refundTarget?.quota_used ?? 0}</span> 积分（任务
+              <span className="font-mono text-xs text-stone-500"> {refundTarget?.id} </span>）。退还后会在用户额度流水记录一笔「任务退还」收入，且不可撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setRefundTarget(null)} disabled={isRefunding}>
+              取消
+            </Button>
+            <Button className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => void handleRefund()} disabled={isRefunding}>
+              {isRefunding ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              确认退还
             </Button>
           </DialogFooter>
         </DialogContent>

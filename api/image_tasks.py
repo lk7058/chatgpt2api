@@ -140,6 +140,15 @@ def create_router() -> APIRouter:
             body.all_tasks,
         )
 
+    @router.post("/api/admin/image-tasks/{task_id}/refund")
+    async def admin_refund_image_task(task_id: str, authorization: str | None = Header(default=None)):
+        """管理员退还指定任务消耗的积分（仅已扣费的完成任务，不可重复退还）。"""
+        require_admin(authorization)
+        try:
+            return await run_in_threadpool(image_task_service.refund_task, task_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+
     @router.post("/api/image-tasks/{task_id}/resume-poll")
     async def resume_image_poll(
         task_id: str,

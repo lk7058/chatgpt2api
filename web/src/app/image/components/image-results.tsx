@@ -408,6 +408,14 @@ export function ImageResults({
                             <p className="text-[10px] leading-4 text-stone-400 sm:text-xs">
                               {imageStatusLabel}
                             </p>
+                            {image.taskId ? (
+                              <p
+                                className="max-w-full truncate font-mono text-[9px] leading-4 text-stone-400/80 sm:text-[10px]"
+                                title={image.taskId}
+                              >
+                                ID: {image.taskId}
+                              </p>
+                            ) : null}
                           </div>
                           </div>
                           {elapsedDisplay != null && (

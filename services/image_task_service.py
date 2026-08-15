@@ -249,16 +249,77 @@ class ImageTaskService:
         return {"cancelled": cancelled}
 
     def list_admin_tasks(self, identity: dict[str, object]) -> dict[str, object]:
-        """管理员查看全部任务（含 owner 信息，用于任务管理）。"""
+        """管理员查看全部任务（含 owner 邮箱与积分信息，用于任务管理）。"""
         with self._lock:
             if self._cleanup_locked():
                 self._save_locked()
-            items = [
-                {**_public_task(task), "owner_id": task.get("owner_id")}
-                for task in self._tasks.values()
-            ]
+            items = []
+            for task in self._tasks.values():
+                item = {**_public_task(task), "owner_id": task.get("owner_id")}
+                # 本次消耗积分：优先取扣费时记录的 quota_used，历史任务按模型权重估算
+                quota_used = task.get("quota_used")
+                if quota_used is None:
+                    if task.get("status") == TASK_STATUS_SUCCESS:
+                        try:
+                            quota_used = config.get_model_quota_weight(str(task.get("model") or "")) * max(1, len(task.get("data") or []))
+                        except Exception:
+                            quota_used = 0
+                    else:
+                        quota_used = 0
+                item["quota_used"] = int(quota_used or 0)
+                if task.get("refunded"):
+                    item["refunded"] = True
+                items.append(item)
+        # 注入用户邮箱（缓存查询）
+        from services.user_service import user_service
+
+        email_cache: dict[str, str] = {}
+        for item in items:
+            owner = str(item.get("owner_id") or "")
+            if owner not in email_cache:
+                user = user_service.get_user(owner) if owner else None
+                email_cache[owner] = str(user.get("email") or "") if user else ""
+            item["owner_email"] = email_cache[owner]
         items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
         return {"items": items}
+
+    def refund_task(self, task_id: str) -> dict[str, object]:
+        """管理员退还指定任务消耗的积分（仅已扣费的完成任务，不可重复退还）。"""
+        task_id = _clean(task_id)
+        with self._lock:
+            target = None
+            for task in self._tasks.values():
+                if str(task.get("id") or "") == task_id:
+                    target = task
+                    break
+            if target is None:
+                raise ValueError("任务不存在")
+            if target.get("status") != TASK_STATUS_SUCCESS:
+                raise ValueError("仅已完成的任务可退还积分")
+            if target.get("refunded"):
+                raise ValueError("该任务积分已退还，请勿重复操作")
+            quota_used = int(target.get("quota_used") or 0)
+            if quota_used <= 0:
+                # 历史任务无扣费记录时按模型权重估算
+                try:
+                    quota_used = config.get_model_quota_weight(str(target.get("model") or "")) * max(1, len(target.get("data") or []))
+                except Exception:
+                    quota_used = 0
+            if quota_used <= 0:
+                raise ValueError("该任务未消耗积分，无需退还")
+            owner_id = _clean(target.get("owner_id"))
+            # 持锁内先标记退还，防止并发重复退还
+            target["refunded"] = True
+            target["refund_amount"] = quota_used
+            target["refunded_at"] = _now_iso()
+            target["updated_at"] = _now_iso()
+            self._save_locked()
+        # 退还额度（锁外执行，避免持锁调用 user_service）
+        from services.user_service import user_service
+
+        if owner_id:
+            user_service.add_quota(owner_id, quota_used, note=f"任务退还：{task_id[:12]}", source="refund")
+        return {"refunded": True, "amount": quota_used, "owner_id": owner_id}
 
     def cancel_tasks_admin(
         self,
@@ -475,6 +536,8 @@ class ImageTaskService:
 
                     weight = config.get_model_quota_weight(model) * max(1, len(data))
                     user_service.deduct_quota(str(user_id), weight, source="image", note=model)
+                    # 记录本次任务消耗的积分（供任务管理展示与退还）
+                    self._update_task(key, quota_used=weight)
             except Exception:
                 pass
             self._log_call(
