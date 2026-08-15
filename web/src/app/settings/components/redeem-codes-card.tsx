@@ -147,7 +147,7 @@ export function RedeemCodesCard() {
             </div>
             <div>
               <h2 className="text-lg font-semibold tracking-tight">额度充值卡</h2>
-              <p className="text-sm text-stone-500">生成充值卡兑换码，用户可在额度中心兑换额度。</p>
+              <p className="text-sm text-stone-500">生成充值卡兑换码，用户可在用户中心「额度明细」中兑换额度。</p>
             </div>
           </div>
 

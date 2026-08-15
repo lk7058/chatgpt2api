@@ -20,7 +20,6 @@ const adminNavItems = [
   { href: "/", label: "首页" },
   { href: "/image", label: "生图" },
   { href: "/center", label: "用户中心" },
-  { href: "/center/redeem", label: "额度中心" },
   { href: "/accounts", label: "号池管理" },
   { href: "/image-manager", label: "图片管理" },
   { href: "/logs", label: "日志管理" },
@@ -32,7 +31,6 @@ const userNavItems = [
   { href: "/", label: "首页" },
   { href: "/image", label: "画图" },
   { href: "/center", label: "用户中心" },
-  { href: "/center/redeem", label: "额度中心" },
 ];
 
 function buildThirdPartyHref(appUrl: string, baseUrl: string, apiKey: string) {
