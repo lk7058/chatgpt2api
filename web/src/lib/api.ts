@@ -681,14 +681,14 @@ export async function upsertThirdPartyApi(body: {
   });
 }
 
-export async function testThirdPartyApi(body: { name: string; base_url: string; api_key?: string }) {
+export async function testThirdPartyApi(body: { id?: string; name: string; base_url: string; api_key?: string }) {
   return httpRequest<{ result: { ok: boolean; status?: number; error?: string } }>("/api/third-party-apis/test", {
     method: "POST",
     body,
   });
 }
 
-export async function fetchThirdPartyModels(body: { name: string; base_url: string; api_key?: string }) {
+export async function fetchThirdPartyModels(body: { id?: string; name: string; base_url: string; api_key?: string }) {
   return httpRequest<{ result: { ok: boolean; models?: string[]; status?: number; error?: string } }>(
     "/api/third-party-apis/models",
     {

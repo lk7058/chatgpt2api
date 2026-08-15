@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { CalendarCheck, Menu } from "lucide-react";
+import { CalendarCheck, ChevronDown, LogOut, Menu, UserRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { HeaderActions } from "@/components/header-actions";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import webConfig from "@/constants/common-env";
 import { doCheckin, fetchCheckinStatus, fetchPublicSettings, fetchThirdPartyApps, logoutSession, type ThirdPartyAppsSettings } from "@/lib/api";
@@ -334,17 +335,35 @@ export function TopNav() {
                 )}
               </button>
             ) : null}
-            <span className="hidden rounded-md bg-stone-100 px-2 py-1 text-[10px] font-medium text-stone-500 dark:bg-white/8 dark:text-stone-300 sm:inline-block sm:text-[11px]">
-              {roleLabel} · {displayName}
-              {session.quotaTotal !== undefined && session.quotaTotal >= 0 ? ` · 额度 ${session.quotaLeft ?? 0}` : ""}
-            </span>
-            <button
-              type="button"
-              className="py-1 text-xs text-stone-400 transition hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200 sm:text-sm"
-              onClick={() => void handleLogout()}
-            >
-              退出
-            </button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-md bg-stone-100 px-2 py-1 text-[11px] font-medium text-stone-500 transition hover:bg-stone-200 hover:text-stone-700 dark:bg-white/8 dark:text-stone-300 dark:hover:bg-white/15 dark:hover:text-white"
+                >
+                  {roleLabel} · {displayName}
+                  {session.quotaTotal !== undefined && session.quotaTotal >= 0 ? ` · 额度 ${session.quotaLeft ?? 0}` : ""}
+                  <ChevronDown className="size-3 opacity-60" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-44 rounded-xl p-1.5">
+                <Link
+                  href="/center"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-stone-700 transition hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-white/10"
+                >
+                  <UserRound className="size-4" />
+                  用户中心
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-rose-600 transition hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
+                >
+                  <LogOut className="size-4" />
+                  退出
+                </button>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </header>

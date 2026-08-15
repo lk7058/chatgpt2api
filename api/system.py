@@ -494,20 +494,32 @@ td{{padding:8px 12px;border-top:1px solid #2a2d3a;font-size:14px}}tr:hover td{{b
     @router.post("/api/third-party-apis/test")
     async def test_third_party_api_endpoint(body: ThirdPartyApiUpsertRequest, authorization: str | None = Header(default=None)):
         require_admin(authorization)
+        # 编辑时前端不回传已脱敏的密钥：按 id 回填已保存的密钥
+        api_key = body.api_key.strip()
+        if not api_key and body.id.strip():
+            from services.config import get_third_party_api_key
+
+            api_key = get_third_party_api_key(body.id.strip())
         item = {
             "name": body.name.strip(),
             "base_url": body.base_url.strip(),
-            "api_key": body.api_key.strip(),
+            "api_key": api_key,
         }
         return {"result": await run_in_threadpool(test_third_party_connection, item)}
 
     @router.post("/api/third-party-apis/models")
     async def fetch_third_party_models_endpoint(body: ThirdPartyApiUpsertRequest, authorization: str | None = Header(default=None)):
         require_admin(authorization)
+        # 编辑时前端不回传已脱敏的密钥：按 id 回填已保存的密钥，避免空密钥请求第三方返回 401
+        api_key = body.api_key.strip()
+        if not api_key and body.id.strip():
+            from services.config import get_third_party_api_key
+
+            api_key = get_third_party_api_key(body.id.strip())
         item = {
             "name": body.name.strip(),
             "base_url": body.base_url.strip(),
-            "api_key": body.api_key.strip(),
+            "api_key": api_key,
         }
         return {"result": await run_in_threadpool(list_third_party_models_endpoint, item)}
 

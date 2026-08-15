@@ -104,6 +104,7 @@ export function ThirdPartyApiCard() {
     setIsFetchingModels(true);
     try {
       const data = await fetchThirdPartyModels({
+        id: editing?.id,
         name: formName.trim() || "fetch",
         base_url: baseUrl,
         ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
@@ -216,6 +217,7 @@ export function ThirdPartyApiCard() {
     setIsTesting(true);
     try {
       const data = await testThirdPartyApi({
+        id: editing?.id,
         name: formName.trim() || "test",
         base_url: baseUrl,
         ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
