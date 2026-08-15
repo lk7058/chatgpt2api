@@ -478,9 +478,9 @@ export default function CenterPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="overflow-x-auto rounded-xl border border-stone-200">
+                    <div className="max-h-56 overflow-auto rounded-xl border border-stone-200">
                       <table className="w-full min-w-[480px] text-left text-sm">
-                        <thead>
+                        <thead className="sticky top-0 z-10">
                           <tr className="border-b border-stone-200 bg-stone-50 text-xs text-stone-500">
                             <th className="px-4 py-3 font-medium">兑换码</th>
                             <th className="px-4 py-3 font-medium">面额</th>
@@ -513,9 +513,9 @@ export default function CenterPage() {
                   {records.length === 0 ? (
                     <div className="px-4 py-8 text-center text-sm text-stone-400">暂无额度记录</div>
                   ) : (
-                    <div className="overflow-x-auto rounded-xl border border-stone-200">
+                    <div className="max-h-[380px] overflow-auto rounded-xl border border-stone-200">
                       <table className="w-full min-w-[640px] text-left text-sm">
-                        <thead>
+                        <thead className="sticky top-0 z-10">
                           <tr className="border-b border-stone-200 bg-stone-50 text-xs text-stone-500">
                             <th className="px-4 py-3 font-medium">时间</th>
                             <th className="px-4 py-3 font-medium">类型</th>
