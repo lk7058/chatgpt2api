@@ -363,7 +363,7 @@ export default function CenterPage() {
         ) : (
           <>
             {/* 每日签到 */}
-            <TabsContent value="checkin">
+            <TabsContent value="checkin" className="space-y-4">
               <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center justify-between">
@@ -419,32 +419,22 @@ export default function CenterPage() {
 
             {/* 额度明细 */}
             <TabsContent value="quota" className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-stone-500">剩余额度</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold">{quotaDisplay}</div>
-                  </CardContent>
-                </Card>
-                <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-emerald-600">累计收入</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold text-emerald-600">{summary.total_income}</div>
-                  </CardContent>
-                </Card>
-                <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium text-rose-500">累计支出</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold text-rose-500">{summary.total_expense}</div>
-                  </CardContent>
-                </Card>
-              </div>
+              <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
+                <CardContent className="grid gap-6 p-6 sm:grid-cols-3">
+                  <div>
+                    <div className="text-sm font-medium text-stone-500">剩余额度</div>
+                    <div className="mt-1.5 text-2xl font-semibold">{quotaDisplay}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-emerald-600">累计收入</div>
+                    <div className="mt-1.5 text-2xl font-semibold text-emerald-600">{summary.total_income}</div>
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-rose-500">累计支出</div>
+                    <div className="mt-1.5 text-2xl font-semibold text-rose-500">{summary.total_expense}</div>
+                  </div>
+                </CardContent>
+              </Card>
 
               <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
                 <CardHeader className="pb-2">
