@@ -9,6 +9,27 @@ from services.config import config
 from services.user_service import user_service
 
 
+def _send_scene_email(scene: str, to_email: str, code: str, smtp: dict) -> None:
+    """按邮件场景发送邮件：优先使用自定义模板（HTML），否则使用内置默认文案。"""
+    from datetime import datetime
+
+    from services.email_service import email_service
+    from services.email_template_service import email_template_service
+
+    subject, body, is_html = email_template_service.render_scene(
+        scene,
+        {
+            "username": to_email.split("@", 1)[0],
+            "email": to_email,
+            "code": code,
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "time": datetime.now().strftime("%H:%M"),
+            "site_title": config.site_title,
+        },
+    )
+    email_service.send_email(to_email=to_email, subject=subject, body=body, smtp=smtp, html=is_html)
+
+
 class LoginRequest(BaseModel):
     username: str = ""
     password: str = ""
@@ -142,12 +163,7 @@ def create_router() -> APIRouter:
             raise HTTPException(status_code=429, detail={"error": str(exc)}) from exc
         code_limiter.record_failure(client_ip)
         try:
-            email_service.send_email(
-                to_email=email,
-                subject="注册验证码",
-                body=f"您的注册验证码是：{code}\n\n验证码 10 分钟内有效，请勿泄露给他人。\n\n（chatgpt2api 自动发送，请勿回复）",
-                smtp=smtp,
-            )
+            _send_scene_email("register_code", email, code, smtp)
         except Exception:
             raise HTTPException(status_code=500, detail={"error": "邮件发送失败，请稍后再试或联系管理员"}) from None
         return {"ok": True, "message": "验证码已发送到邮箱，请查收"}
@@ -219,12 +235,7 @@ def create_router() -> APIRouter:
             raise HTTPException(status_code=429, detail={"error": str(exc)}) from exc
         code_limiter.record_failure(client_ip)
         try:
-            email_service.send_email(
-                to_email=email,
-                subject="找回密码验证码",
-                body=f"您的找回密码验证码是：{code}\n\n验证码 10 分钟内有效，请勿泄露给他人。\n\n（chatgpt2api 自动发送，请勿回复）",
-                smtp=smtp,
-            )
+            _send_scene_email("forgot_code", email, code, smtp)
         except Exception:
             raise HTTPException(status_code=500, detail={"error": "邮件发送失败，请稍后再试或联系管理员"}) from None
         return {"ok": True, "message": "验证码已发送到邮箱，请查收"}
@@ -468,12 +479,7 @@ def create_router() -> APIRouter:
             raise HTTPException(status_code=429, detail={"error": str(exc)}) from exc
         code_limiter.record_failure(client_ip)
         try:
-            email_service.send_email(
-                to_email=email,
-                subject="绑定邮箱验证码",
-                body=f"您的绑定邮箱验证码是：{code}\n\n验证码 10 分钟内有效，请勿泄露给他人。\n\n（chatgpt2api 自动发送，请勿回复）",
-                smtp=smtp,
-            )
+            _send_scene_email("bind_code", email, code, smtp)
         except Exception:
             raise HTTPException(status_code=500, detail={"error": "邮件发送失败，请稍后再试或联系管理员"}) from None
         return {"ok": True, "message": "验证码已发送到邮箱，请查收"}
@@ -688,12 +694,7 @@ def create_router() -> APIRouter:
         from services.email_service import email_service
 
         try:
-            email_service.send_email(
-                to_email=email,
-                subject="SMTP 测试邮件",
-                body="这是一封测试邮件，说明 SMTP 配置正常。",
-                smtp=smtp,
-            )
+            _send_scene_email("smtp_test", email, "——", smtp)
         except Exception as exc:
             raise HTTPException(status_code=500, detail={"error": f"发送失败：{exc}"}) from exc
         return {"ok": True, "message": "测试邮件已发送"}

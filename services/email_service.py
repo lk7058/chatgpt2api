@@ -92,8 +92,8 @@ class EmailService:
             self._cleanup_expired()
             return email in self._codes
 
-    def send_email(self, *, to_email: str, subject: str, body: str, smtp: dict[str, Any]) -> None:
-        """通过 SMTP 发送邮件。smtp 为 config 中的 smtp 配置。"""
+    def send_email(self, *, to_email: str, subject: str, body: str, smtp: dict[str, Any], html: bool = False) -> None:
+        """通过 SMTP 发送邮件。smtp 为 config 中的 smtp 配置；html=True 时 body 为 HTML 内容。"""
         host = str(smtp.get("host") or "").strip()
         port = int(smtp.get("port") or 465)
         username = str(smtp.get("username") or "").strip()
@@ -105,7 +105,7 @@ class EmailService:
         if not host or not username or not password:
             raise ValueError("SMTP 未配置完整（host/username/password）")
 
-        msg = MIMEText(body, "plain", "utf-8")
+        msg = MIMEText(body, "html" if html else "plain", "utf-8")
         msg["Subject"] = Header(subject, "utf-8")
         msg["From"] = formataddr((str(Header(from_name, "utf-8")), from_addr))
         msg["To"] = to_email

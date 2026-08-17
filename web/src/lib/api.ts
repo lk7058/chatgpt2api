@@ -704,6 +704,43 @@ export async function deleteThirdPartyApi(apiId: string) {
   });
 }
 
+export type EmailTemplate = {
+  id: string;
+  name: string;
+  scene: string;
+  subject: string;
+  body_html: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchEmailTemplates() {
+  return httpRequest<{ items: EmailTemplate[]; scenes: Record<string, string>; variables: string[] }>(
+    "/api/admin/email-templates",
+  );
+}
+
+export async function saveEmailTemplate(body: { id?: string; name: string; scene: string; subject: string; body_html: string }) {
+  return httpRequest<{ item: EmailTemplate; items: EmailTemplate[] }>("/api/admin/email-templates", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function deleteEmailTemplate(templateId: string) {
+  return httpRequest<{ ok: boolean; items: EmailTemplate[] }>(
+    `/api/admin/email-templates/${encodeURIComponent(templateId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function previewEmailTemplate(body: { subject: string; body_html: string }) {
+  return httpRequest<{ subject: string; body_html: string }>("/api/admin/email-templates/preview", {
+    method: "POST",
+    body,
+  });
+}
+
 export async function fetchGenerationRecords(limit = 200) {
   return httpRequest<{ items: GenerationRecord[] }>(`/api/records?limit=${limit}`);
 }

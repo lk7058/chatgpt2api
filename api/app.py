@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 
-from api import accounts, ai, image_tasks, records, system, users
+from api import accounts, ai, email_templates, image_tasks, records, system, users
 from api.errors import install_exception_handlers
 from api.support import resolve_web_asset, start_limited_account_watcher
 from services.backup_service import backup_service
@@ -78,6 +78,7 @@ def create_app() -> FastAPI:
     app.add_middleware(GZipMiddleware, minimum_size=1000)
     app.include_router(ai.create_router())
     app.include_router(accounts.create_router())
+    app.include_router(email_templates.create_router())
     app.include_router(image_tasks.create_router())
     app.include_router(system.create_router(app_version))
     app.include_router(users.create_router())

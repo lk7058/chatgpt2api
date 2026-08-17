@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ShieldCheck } from "lucide-react";
 import { testSmtp } from "@/lib/api";
 import { useSettingsStore } from "../store";
+import { EmailTemplateManager } from "./email-template-manager";
 
 export function SMTPCard() {
   const config = useSettingsStore((state) => state.config);
@@ -150,6 +151,8 @@ export function SMTPCard() {
         </div>
       </CardContent>
     </Card>
+
+    <EmailTemplateManager />
 
     <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
       <CardContent className="space-y-6 p-6">
