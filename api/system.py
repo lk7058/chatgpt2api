@@ -342,6 +342,16 @@ def create_router(app_version: str) -> APIRouter:
         require_admin(authorization)
         return await run_in_threadpool(delete_to_target, target_free_mb, dry_run)
 
+    @router.get("/api/version")
+    async def get_version(authorization: str | None = Header(default=None)):
+        """当前版本信息（仅管理员）：前端据此与 GitHub 发行版对比检测更新。"""
+        require_admin(authorization)
+        return {
+            "version": config.app_version,
+            "repository": "lk7058/chatgpt2api",
+            "release_url": "https://github.com/lk7058/chatgpt2api/releases",
+        }
+
     @router.get("/api/public-announcements")
     async def get_public_announcements():
         """公开接口：返回已启用的弹窗公告与广告栏（无需登录）。"""

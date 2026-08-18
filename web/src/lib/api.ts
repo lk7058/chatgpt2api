@@ -741,6 +741,10 @@ export async function previewEmailTemplate(body: { subject: string; body_html: s
   });
 }
 
+export async function fetchAppVersion() {
+  return httpRequest<{ version: string; repository: string; release_url: string }>("/api/version");
+}
+
 export async function fetchGenerationRecords(limit = 200) {
   return httpRequest<{ items: GenerationRecord[] }>(`/api/records?limit=${limit}`);
 }

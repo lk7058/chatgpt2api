@@ -1,9 +1,10 @@
 "use client";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { VersionCheck } from "@/components/version-check";
 import { cn } from "@/lib/utils";
 
-export function HeaderActions({ className, showGithubText = true }: { className?: string; showGithubText?: boolean }) {
+export function HeaderActions({ className, showGithubText = true, isAdmin = false }: { className?: string; showGithubText?: boolean; isAdmin?: boolean }) {
   return (
     <div className={cn("flex items-center gap-2 sm:gap-3", className)}>
       <ThemeToggle />
@@ -17,6 +18,7 @@ export function HeaderActions({ className, showGithubText = true }: { className?
         <img src="/github.svg" alt="" className="size-4" />
         {showGithubText ? <span className="hidden sm:inline">GitHub</span> : null}
       </a>
+      {isAdmin ? <VersionCheck /> : null}
     </div>
   );
 }
