@@ -759,6 +759,33 @@ class ImageTaskService:
         thread.start()
         return _public_task(task)
 
+    def wait_for_task(
+        self,
+        identity: dict[str, object],
+        task_id: str,
+        *,
+        timeout_secs: float = 240.0,
+        poll_interval: float = 2.0,
+    ) -> dict[str, Any]:
+        """阻塞等待任务到达终态（供 MCP 生图工具同步返回结果使用）。超时返回当前任务状态。"""
+        owner = _owner_id(identity)
+        key = _task_key(owner, _clean(task_id))
+        deadline = time.time() + max(1.0, float(timeout_secs))
+        interval = max(0.5, min(float(poll_interval), 5.0))
+        while time.time() < deadline:
+            with self._lock:
+                task = self._tasks.get(key)
+                if task is None:
+                    raise ValueError("task not found")
+                if task.get("status") in TERMINAL_STATUSES:
+                    return _public_task(task)
+            time.sleep(interval)
+        with self._lock:
+            task = self._tasks.get(key)
+            if task is None:
+                return {"id": _clean(task_id), "status": TASK_STATUS_ERROR, "error": "task not found"}
+            return _public_task(task)
+
     def _run_resume_poll(
         self,
         key: str,

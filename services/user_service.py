@@ -129,6 +129,13 @@ class UserService:
             "total_checkins": int(raw.get("total_checkins", 0) or 0),
             "last_login_at": self._clean(raw.get("last_login_at")),
             "last_login_ip": self._clean(raw.get("last_login_ip")),
+            # MCP 服务字段：mcp_key_hash 为哈希值，永不外泄
+            "mcp_enabled": bool(raw.get("mcp_enabled", True)),
+            "mcp_key_hash": self._clean(raw.get("mcp_key_hash")),
+            "mcp_key_hint": self._clean(raw.get("mcp_key_hint")),
+            "mcp_key_created_at": self._clean(raw.get("mcp_key_created_at")),
+            "mcp_call_count": int(raw.get("mcp_call_count", 0) or 0),
+            "mcp_last_used_at": self._clean(raw.get("mcp_last_used_at")),
         }
 
     @staticmethod
@@ -151,6 +158,12 @@ class UserService:
             "total_checkins": user.get("total_checkins", 0),
             "last_login_at": user.get("last_login_at") or "",
             "last_login_ip": user.get("last_login_ip") or "",
+            # MCP 字段（不含 key 哈希）
+            "mcp_enabled": bool(user.get("mcp_enabled", True)),
+            "mcp_key_hint": user.get("mcp_key_hint") or "",
+            "mcp_key_created_at": user.get("mcp_key_created_at") or "",
+            "mcp_call_count": int(user.get("mcp_call_count", 0) or 0),
+            "mcp_last_used_at": user.get("mcp_last_used_at") or "",
         }
 
     # ── 查询 ────────────────────────────────────────────────
@@ -562,6 +575,64 @@ class UserService:
                 )
             except Exception:
                 pass
+
+    # ── MCP 服务 ─────────────────────────────────────────────
+
+    def set_mcp_enabled(self, user_id: str, enabled: bool) -> dict[str, Any] | None:
+        """启用/关闭单个用户的 MCP 功能。"""
+        user_id = self._clean(user_id)
+        with self._lock:
+            user = self._users.get(user_id)
+            if user is None:
+                return None
+            user["mcp_enabled"] = bool(enabled)
+            user["updated_at"] = _now_iso()
+            self._save()
+            return self._public(user)
+
+    def set_mcp_key(self, user_id: str, raw_key: str) -> dict[str, Any] | None:
+        """保存用户 MCP Key 哈希（生成/重置后旧 Key 立即失效）。"""
+        user_id = self._clean(user_id)
+        raw_key = self._clean(raw_key)
+        if not user_id or not raw_key:
+            raise ValueError("user_id 与 key 不能为空")
+        with self._lock:
+            user = self._users.get(user_id)
+            if user is None:
+                return None
+            user["mcp_key_hash"] = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+            user["mcp_key_hint"] = f"****{raw_key[-4:]}"
+            user["mcp_key_created_at"] = _now_iso()
+            user["updated_at"] = _now_iso()
+            self._save()
+            return self._public(user)
+
+    def find_user_by_mcp_key(self, raw_key: str) -> dict[str, Any] | None:
+        """按 MCP Key 查找用户（Key 校验；失败返回 None）。"""
+        raw_key = self._clean(raw_key)
+        if not raw_key:
+            return None
+        digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        with self._lock:
+            for user in self._users.values():
+                stored = self._clean(user.get("mcp_key_hash"))
+                if stored and hmac.compare_digest(stored, digest):
+                    return dict(user)
+        return None
+
+    def bump_mcp_usage(self, user_id: str) -> None:
+        """记录一次成功的 MCP 调用（调用次数 +1、更新最近使用时间）。"""
+        user_id = self._clean(user_id)
+        if not user_id:
+            return
+        with self._lock:
+            user = self._users.get(user_id)
+            if user is None:
+                return
+            user["mcp_call_count"] = int(user.get("mcp_call_count", 0) or 0) + 1
+            user["mcp_last_used_at"] = _now_iso()
+            user["updated_at"] = _now_iso()
+            self._save()
 
     # ── 会话 ────────────────────────────────────────────────
 

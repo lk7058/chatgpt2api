@@ -6,9 +6,9 @@ from threading import Event, Thread
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
-from api import accounts, ai, email_templates, image_tasks, records, system, users
+from api import accounts, ai, email_templates, image_tasks, mcp, records, system, users
 from api.errors import install_exception_handlers
 from api.support import resolve_web_asset, start_limited_account_watcher
 from services.backup_service import backup_service
@@ -46,6 +46,17 @@ def create_app() -> FastAPI:
                 print(f"[users] admin account '{admin_account['username']}' ready")
         except Exception as exc:
             print(f"[users] ensure admin failed: {exc}")
+        # MCP Streamable HTTP 会话管理器：必须先 run() 才能处理请求（SDK 缺失不影响启动）
+        mcp_mgr_ctx = None
+        try:
+            from api.mcp_server import get_mcp_session_manager
+
+            mcp_mgr_ctx = get_mcp_session_manager().run()
+            await mcp_mgr_ctx.__aenter__()
+            print("[mcp] MCP session manager started")
+        except Exception as exc:
+            mcp_mgr_ctx = None
+            print(f"[mcp] MCP session manager start skipped: {exc}")
         try:
             yield
         finally:
@@ -53,6 +64,12 @@ def create_app() -> FastAPI:
             thread.join(timeout=1)
             cleanup_thread.join(timeout=1)
             backup_service.stop()
+            if mcp_mgr_ctx is not None:
+                try:
+                    await mcp_mgr_ctx.__aexit__(None, None, None)
+                    print("[mcp] MCP session manager stopped")
+                except Exception as exc:
+                    print(f"[mcp] MCP session manager stop failed: {exc}")
 
     app = FastAPI(title="chatgpt2api", version=app_version, lifespan=lifespan)
     install_exception_handlers(app)
@@ -65,6 +82,45 @@ def create_app() -> FastAPI:
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         return response
+
+    @app.middleware("http")
+    async def mcp_auth_middleware(request: Request, call_next):
+        """MCP 端点鉴权：每次调用校验 ①全站开关 ②Key 有效性 ③用户 MCP 是否启用。"""
+        path = request.url.path
+        if path == "/mcp" or path.startswith("/mcp/"):
+            if not config.mcp_enabled:
+                return JSONResponse(status_code=403, content={"detail": {"error": "MCP 服务已关闭"}})
+            authorization = str(request.headers.get("authorization") or "")
+            scheme, _, value = authorization.partition(" ")
+            raw_key = value.strip() if scheme.lower() == "bearer" else ""
+            if not raw_key:
+                return JSONResponse(status_code=401, content={"detail": {"error": "缺少 MCP Key"}})
+            user = user_service.find_user_by_mcp_key(raw_key)
+            if user is None:
+                return JSONResponse(status_code=401, content={"detail": {"error": "MCP Key 无效"}})
+            if not bool(user.get("mcp_enabled", True)):
+                return JSONResponse(status_code=403, content={"detail": {"error": "MCP 功能已被禁用"}})
+            base_url = f"{request.url.scheme}://{request.headers.get('host', request.url.netloc)}"
+            identity = {
+                "id": user.get("id"),
+                "name": user.get("username"),
+                "username": user.get("username"),
+                "role": "user",
+                "user_id": user.get("id"),
+                "session": True,
+                "mcp": True,
+                "base_url": base_url,
+            }
+            try:
+                from api.mcp_server import mcp_identity_var
+            except Exception:
+                return JSONResponse(status_code=503, content={"detail": {"error": "MCP 服务不可用"}})
+            token = mcp_identity_var.set(identity)
+            try:
+                return await call_next(request)
+            finally:
+                mcp_identity_var.reset(token)
+        return await call_next(request)
 
     # 静态导出与 API 同源部署，禁止跨域（收紧默认 allow_origins=["*"]）
     app.add_middleware(
@@ -83,6 +139,18 @@ def create_app() -> FastAPI:
     app.include_router(system.create_router(app_version))
     app.include_router(users.create_router())
     app.include_router(records.create_router())
+    app.include_router(mcp.create_router())
+
+    # MCP Streamable HTTP 端点（/mcp）：mcp SDK 未安装时不影响主服务启动。
+    # 注意：Starlette 1.0 的 Mount 不匹配裸路径 /mcp，须用显式 Route + 类式 ASGI app。
+    try:
+        from api.mcp_server import MCPHTTPApp
+        from starlette.routing import Route
+
+        app.router.routes.append(Route("/mcp", endpoint=MCPHTTPApp(), methods=["GET", "POST", "DELETE"], name="mcp"))
+        print("[mcp] MCP server mounted at /mcp")
+    except Exception as exc:  # pragma: no cover
+        print(f"[mcp] MCP server mount skipped: {exc}")
 
     @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     async def serve_web(full_path: str):

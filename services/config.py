@@ -83,6 +83,15 @@ DEFAULT_THIRD_PARTY_APPS = {
     },
 }
 
+DEFAULT_MCP_SETTINGS = {"enabled": True}
+
+
+def _normalize_mcp_settings(value: object) -> dict[str, object]:
+    """归一化 MCP 服务配置：全局开关。"""
+    if not isinstance(value, dict):
+        return dict(DEFAULT_MCP_SETTINGS)
+    return {"enabled": _normalize_bool(value.get("enabled"), True)}
+
 
 def _normalize_bool(value: object, default: bool = False) -> bool:
     if isinstance(value, str):
@@ -974,6 +983,14 @@ class ConfigStore:
     def get_third_party_apps_settings(self) -> dict[str, object]:
         return _normalize_third_party_apps_settings(self.data.get("third_party_apps"))
 
+    def get_mcp_settings(self) -> dict[str, object]:
+        return _normalize_mcp_settings(self.data.get("mcp"))
+
+    @property
+    def mcp_enabled(self) -> bool:
+        """MCP 服务全局开关（false 时所有用户 MCP 调用立即失效）。"""
+        return bool(self.get_mcp_settings().get("enabled"))
+
     def update(self, data: dict[str, object]) -> dict[str, object]:
         next_data = dict(self.data)
         next_data.update(dict(data or {}))
@@ -1051,6 +1068,8 @@ class ConfigStore:
                     incoming_runtime["_existing_cf_cookies"] = previous_clearance.get("cf_cookies")
                     incoming_runtime["_existing_cf_clearance"] = previous_clearance.get("cf_clearance")
             next_data["proxy_runtime"] = _normalize_proxy_runtime_settings(incoming_runtime)
+        if "mcp" in next_data:
+            next_data["mcp"] = _normalize_mcp_settings(next_data.get("mcp"))
         next_data.pop("backup_state", None)
         self.data = next_data
         self._save()

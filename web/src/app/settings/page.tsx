@@ -30,6 +30,7 @@ const Sub2APIConnections = dynamic(() => import("./components/sub2api-connection
 const ImageCleanupCard = dynamic(() => import("./components/image-cleanup-card").then((m) => m.ImageCleanupCard), { ssr: false, loading: cardLoading });
 const AnnouncementCard = dynamic(() => import("./components/announcement-card").then((m) => m.AnnouncementCard), { ssr: false, loading: cardLoading });
 const AdminTasksCard = dynamic(() => import("./components/admin-tasks-card").then((m) => m.AdminTasksCard), { ssr: false, loading: cardLoading });
+const McpManagementCard = dynamic(() => import("./components/mcp-management-card").then((m) => m.McpManagementCard), { ssr: false, loading: cardLoading });
 const CPAPoolDialog = dynamic(() => import("./components/cpa-pool-dialog").then((m) => m.CPAPoolDialog), { ssr: false });
 const ImportBrowserDialog = dynamic(() => import("./components/import-browser-dialog").then((m) => m.ImportBrowserDialog), { ssr: false });
 
@@ -51,6 +52,7 @@ const settingsTabs = [
   { value: "cleanup", title: "数据清理" },
   { value: "announce", title: "公告" },
   { value: "tasks", title: "任务管理" },
+  { value: "mcp", title: "MCP 服务" },
 ];
 
 function SettingsDataController() {
@@ -156,6 +158,9 @@ function SettingsPageContent() {
         </TabsContent>
         <TabsContent value="tasks">
           <AdminTasksCard />
+        </TabsContent>
+        <TabsContent value="mcp">
+          <McpManagementCard />
         </TabsContent>
       </Tabs>
       <CPAPoolDialog />

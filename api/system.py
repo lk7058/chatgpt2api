@@ -87,7 +87,8 @@ def create_router(app_version: str) -> APIRouter:
     router = APIRouter()
 
     @router.get("/version")
-    async def get_version():
+    async def get_version(authorization: str | None = Header(default=None)):
+        require_admin(authorization)
         return {"version": app_version}
 
     @router.get("/api/settings")

@@ -745,6 +745,94 @@ export async function fetchAppVersion() {
   return httpRequest<{ version: string; repository: string; release_url: string }>("/api/version");
 }
 
+// ── MCP 服务 ───────────────────────────────────────────────
+
+export type McpInfo = {
+  global_enabled: boolean;
+  mcp_enabled: boolean;
+  has_key: boolean;
+  key_hint: string;
+  key_created_at: string;
+  call_count: number;
+  last_used_at: string;
+  endpoint: string;
+};
+
+export type AdminMcpUser = {
+  user_id: string;
+  username: string;
+  email: string;
+  role: string;
+  mcp_enabled: boolean;
+  has_key: boolean;
+  key_hint: string;
+  key_created_at: string;
+  call_count: number;
+  last_used_at: string;
+};
+
+export type McpLogItem = {
+  id: string;
+  time: string;
+  user_id: string;
+  username: string;
+  tool: string;
+  status: string;
+  message: string;
+  quota_delta: number;
+};
+
+/** 当前用户 MCP 状态（个人中心） */
+export async function fetchMcpInfo() {
+  return httpRequest<McpInfo>("/api/mcp/info");
+}
+
+/** 生成/重置当前用户的专属 MCP Key（旧 Key 立即失效） */
+export async function createMcpKey() {
+  return httpRequest<{ key: string; item: McpInfo }>("/api/mcp/key", { method: "POST" });
+}
+
+/** 管理端：全局 MCP 开关状态 */
+export async function fetchAdminMcpSettings() {
+  return httpRequest<{ mcp: { enabled: boolean } }>("/api/admin/mcp/settings");
+}
+
+/** 管理端：保存全局 MCP 开关 */
+export async function saveAdminMcpSettings(enabled: boolean) {
+  return httpRequest<{ mcp: { enabled: boolean } }>("/api/admin/mcp/settings", { method: "POST", body: { enabled } });
+}
+
+/** 管理端：逐用户 MCP 列表 */
+export async function fetchAdminMcpUsers() {
+  return httpRequest<{ items: AdminMcpUser[]; global_enabled: boolean }>("/api/admin/mcp/users");
+}
+
+/** 管理端：重置指定用户 MCP Key */
+export async function adminResetMcpKey(userId: string) {
+  return httpRequest<{ key: string; item: AdminMcpUser }>(`/api/admin/mcp/users/${encodeURIComponent(userId)}/reset-key`, { method: "POST" });
+}
+
+/** 管理端：启用/关闭指定用户 MCP */
+export async function adminSetMcpUserEnabled(userId: string, enabled: boolean) {
+  return httpRequest<{ item: AdminMcpUser }>(`/api/admin/mcp/users/${encodeURIComponent(userId)}/enabled`, {
+    method: "POST",
+    body: { enabled },
+  });
+}
+
+/** 管理端：MCP 调用日志 */
+export async function fetchAdminMcpLogs(params: { user_id?: string; tool?: string; limit?: number }) {
+  const query = new URLSearchParams();
+  if (params.user_id) {
+    query.set("user_id", params.user_id);
+  }
+  if (params.tool) {
+    query.set("tool", params.tool);
+  }
+  query.set("limit", String(params.limit || 200));
+  return httpRequest<{ items: McpLogItem[] }>(`/api/admin/mcp/logs?${query.toString()}`);
+}
+
 export async function fetchGenerationRecords(limit = 200) {
   return httpRequest<{ items: GenerationRecord[] }>(`/api/records?limit=${limit}`);
 }
