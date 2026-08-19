@@ -2,6 +2,22 @@
 
 本项目基于 [basketikun/chatgpt2api](https://github.com/basketikun/chatgpt2api) 二次开发。
 
+## [1.0.1] - 2026-08-19
+
+### 新增
+
+- MCP 服务支持：Streamable HTTP 端点 `/mcp` + Key 鉴权（Bearer），工具 `generate_image` / `get_quota`；用户中心「MCP 接入」自助生成/复制 Key 与客户端配置，设置页「MCP 服务」全局开关 / 逐用户 Key 管理 / 调用日志
+
+### 修复
+
+- 用户中心各 Tab 页面尺寸不统一：容器宽度与首页统一，四个分区（签到 / 额度 / 安全 / MCP）内容区统一最小高度，切换不再跳动
+- 登录/注册后默认打开首页
+
+### 其他
+
+- `/api/version` 增加管理员鉴权（版本信息仅管理员可见）
+- 反馈邮箱：l@w.cx
+
 ## [1.0.0] - 2026-08-18
 
 ### 新增

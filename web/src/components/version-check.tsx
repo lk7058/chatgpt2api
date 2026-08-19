@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, ExternalLink, LoaderCircle, Rocket } from "lucide-react";
+import { CheckCircle2, ExternalLink, LoaderCircle, Mail, Rocket } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -234,6 +234,18 @@ export function VersionCheck() {
               ) : (
                 <div className="rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-500">暂无发布记录</div>
               )}
+            </div>
+
+            {/* 反馈邮箱 */}
+            <div className="flex items-center gap-1.5 text-sm text-stone-500 dark:text-stone-400">
+              <Mail className="size-4" />
+              反馈邮箱：
+              <a
+                href="mailto:l@w.cx"
+                className="font-medium text-stone-700 underline underline-offset-2 hover:text-stone-950 dark:text-stone-300 dark:hover:text-white"
+              >
+                l@w.cx
+              </a>
             </div>
 
             {/* 前往发行版页 */}
