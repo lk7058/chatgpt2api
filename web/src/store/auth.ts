@@ -48,7 +48,8 @@ function normalizeSession(value: unknown, fallbackKey = ""): StoredAuthSession |
 }
 
 export function getDefaultRouteForRole(role: AuthRole) {
-  return role === "admin" ? "/accounts" : "/image";
+  // 登录/注册后默认打开首页（公告 + 额度 + 历史图片）
+  return "/";
 }
 
 export async function getStoredAuthKey() {

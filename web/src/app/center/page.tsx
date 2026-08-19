@@ -295,7 +295,7 @@ export default function CenterPage() {
   const unlimited = quotaTotal < 0;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5 px-4 py-6">
+    <div className="mx-auto w-full max-w-[1200px] space-y-5 px-4 py-6 sm:px-6">
       {/* 账户概览 */}
       <div className="relative overflow-hidden rounded-2xl bg-stone-950 p-6 text-white shadow-sm">
         <div className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full bg-stone-800/60 blur-2xl" />
@@ -365,7 +365,7 @@ export default function CenterPage() {
         ) : (
           <>
             {/* 每日签到 */}
-            <TabsContent value="checkin" className="space-y-4">
+            <TabsContent value="checkin" className="min-h-[440px] space-y-4">
               <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center justify-between">
@@ -420,7 +420,7 @@ export default function CenterPage() {
             </TabsContent>
 
             {/* 额度明细 */}
-            <TabsContent value="quota" className="space-y-4">
+            <TabsContent value="quota" className="min-h-[440px] space-y-4">
               <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
                 <CardContent className="grid gap-6 p-6 sm:grid-cols-3">
                   <div>
@@ -556,7 +556,7 @@ export default function CenterPage() {
             </TabsContent>
 
             {/* 安全设置 */}
-            <TabsContent value="security" className="space-y-4">
+            <TabsContent value="security" className="min-h-[440px] space-y-4">
               <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -644,7 +644,7 @@ export default function CenterPage() {
                 </CardContent>
               </Card>
             </TabsContent>
-            <TabsContent value="mcp" className="space-y-4">
+            <TabsContent value="mcp" className="min-h-[440px] space-y-4">
               <McpAccessCard />
             </TabsContent>
           </>
