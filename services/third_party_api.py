@@ -103,6 +103,14 @@ def _headers(item: dict[str, Any]) -> dict[str, str]:
     return headers
 
 
+def _proxies(item: dict[str, Any]) -> dict[str, str] | None:
+    """第三方 API 可选代理（http/socks5），用于绕过上游对服务器 IP 的封锁。"""
+    proxy = str(item.get("proxy") or "").strip()
+    if not proxy:
+        return None
+    return {"http": proxy, "https": proxy}
+
+
 def _third_party_error_message(status_code: int, data: dict[str, Any]) -> str:
     """从第三方错误响应提取简短脱敏消息（不原样回显上游响应体）。"""
     try:
@@ -120,7 +128,7 @@ def chat_completion(item: dict[str, Any], body: dict[str, Any]) -> dict[str, Any
     url = _endpoint(str(item.get("base_url") or ""), "/v1/chat/completions")
     payload = dict(body)
     payload["stream"] = False
-    resp = requests.post(url, headers=_headers(item), json=payload, timeout=300)
+    resp = requests.post(url, headers=_headers(item), json=payload, timeout=300, proxies=_proxies(item))
     try:
         data = resp.json()
     except Exception:
@@ -139,7 +147,7 @@ def image_generation(item: dict[str, Any], body: dict[str, Any]) -> dict[str, An
     payload["n"] = max(1, int(payload.get("n") or 1))
 
     def _post(current: dict[str, Any]):
-        resp = requests.post(url, headers=_headers(item), json=current, timeout=600)
+        resp = requests.post(url, headers=_headers(item), json=current, timeout=600, proxies=_proxies(item))
         try:
             data = resp.json()
         except Exception:
@@ -202,7 +210,7 @@ def image_edit(item: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
     headers.pop("Content-Type", None)  # multipart 由 requests 自动设置
 
     def _post(current: dict[str, Any]):
-        resp = requests.post(url, headers=headers, data=current, multipart=mime, timeout=600)
+        resp = requests.post(url, headers=headers, data=current, multipart=mime, timeout=600, proxies=_proxies(item))
         try:
             data = resp.json()
         except Exception:
@@ -224,7 +232,7 @@ def chat_completion_stream(item: dict[str, Any], body: dict[str, Any]) -> Iterat
     url = _endpoint(str(item.get("base_url") or ""), "/v1/chat/completions")
     payload = dict(body)
     payload["stream"] = True
-    with requests.post(url, headers=_headers(item), json=payload, stream=True, timeout=300) as resp:
+    with requests.post(url, headers=_headers(item), json=payload, stream=True, timeout=300, proxies=_proxies(item)) as resp:
         if resp.status_code >= 400:
             try:
                 data = resp.json()
@@ -249,7 +257,7 @@ def test_connection(item: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": "base_url 不能为空"}
     url = _endpoint(base_url, "/v1/models")
     try:
-        resp = requests.get(url, headers=_headers(item), timeout=15)
+        resp = requests.get(url, headers=_headers(item), timeout=15, proxies=_proxies(item))
     except Exception as exc:
         return {"ok": False, "error": f"连接失败：{exc}"}
     if resp.status_code >= 400:
@@ -267,7 +275,7 @@ def list_models(item: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": "base_url 不能为空"}
     url = _endpoint(base_url, "/v1/models")
     try:
-        resp = requests.get(url, headers=_headers(item), timeout=30)
+        resp = requests.get(url, headers=_headers(item), timeout=30, proxies=_proxies(item))
     except Exception as exc:
         return {"ok": False, "error": f"获取模型失败：{exc}"}
     if resp.status_code >= 400:

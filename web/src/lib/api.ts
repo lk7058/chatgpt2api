@@ -421,6 +421,7 @@ export type ThirdPartyApi = {
   name: string;
   base_url: string;
   has_api_key: boolean;
+  proxy?: string;
   models: string[];
   image_tiers?: Record<string, string[]>;
   enabled: boolean;
@@ -675,6 +676,7 @@ export async function upsertThirdPartyApi(body: {
   name: string;
   base_url: string;
   api_key?: string;
+  proxy?: string;
   models?: string[];
   image_tiers?: Record<string, string[]>;
   enabled?: boolean;
@@ -686,14 +688,14 @@ export async function upsertThirdPartyApi(body: {
   });
 }
 
-export async function testThirdPartyApi(body: { id?: string; name: string; base_url: string; api_key?: string }) {
+export async function testThirdPartyApi(body: { id?: string; name: string; base_url: string; api_key?: string; proxy?: string }) {
   return httpRequest<{ result: { ok: boolean; status?: number; error?: string } }>("/api/third-party-apis/test", {
     method: "POST",
     body,
   });
 }
 
-export async function fetchThirdPartyModels(body: { id?: string; name: string; base_url: string; api_key?: string }) {
+export async function fetchThirdPartyModels(body: { id?: string; name: string; base_url: string; api_key?: string; proxy?: string }) {
   return httpRequest<{ result: { ok: boolean; models?: string[]; status?: number; error?: string } }>(
     "/api/third-party-apis/models",
     {

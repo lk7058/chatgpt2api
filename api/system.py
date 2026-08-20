@@ -78,6 +78,7 @@ class ThirdPartyApiUpsertRequest(BaseModel):
     name: str = ""
     base_url: str = ""
     api_key: str = ""
+    proxy: str = ""
     models: list[str] = []
     image_tiers: dict[str, list[str]] = {}
     enabled: bool = True
@@ -467,6 +468,7 @@ td{{padding:8px 12px;border-top:1px solid #2a2d3a;font-size:14px}}tr:hover td{{b
             "name": name,
             "base_url": base_url,
             "api_key": body.api_key.strip(),
+            "proxy": body.proxy.strip(),
             "models": [str(item).strip() for item in body.models if str(item).strip()],
             "image_tiers": _normalize_image_tiers(body.image_tiers),
             "enabled": body.enabled,
@@ -517,6 +519,7 @@ td{{padding:8px 12px;border-top:1px solid #2a2d3a;font-size:14px}}tr:hover td{{b
             "name": body.name.strip(),
             "base_url": body.base_url.strip(),
             "api_key": api_key,
+            "proxy": body.proxy.strip(),
         }
         return {"result": await run_in_threadpool(test_third_party_connection, item)}
 
@@ -533,6 +536,7 @@ td{{padding:8px 12px;border-top:1px solid #2a2d3a;font-size:14px}}tr:hover td{{b
             "name": body.name.strip(),
             "base_url": body.base_url.strip(),
             "api_key": api_key,
+            "proxy": body.proxy.strip(),
         }
         return {"result": await run_in_threadpool(list_third_party_models_endpoint, item)}
 

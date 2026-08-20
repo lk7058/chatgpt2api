@@ -53,6 +53,7 @@ export function ThirdPartyApiCard() {
   const [editing, setEditing] = useState<ThirdPartyApi | null>(null);
   const [formName, setFormName] = useState("");
   const [formBaseUrl, setFormBaseUrl] = useState("");
+  const [formProxy, setFormProxy] = useState("");
   const [formApiKey, setFormApiKey] = useState("");
   const [formEnabled, setFormEnabled] = useState(true);
   const [formDefault, setFormDefault] = useState(false);
@@ -89,6 +90,7 @@ export function ThirdPartyApiCard() {
     setEditing(null);
     setFormName("");
     setFormBaseUrl("");
+    setFormProxy("");
     setFormApiKey("");
     setFormEnabled(true);
     setFormDefault(false);
@@ -103,6 +105,7 @@ export function ThirdPartyApiCard() {
     setEditing(item);
     setFormName(item.name);
     setFormBaseUrl(item.base_url);
+    setFormProxy(item.proxy || "");
     setFormApiKey("");
     setFormEnabled(item.enabled);
     setFormDefault(item.default);
@@ -134,6 +137,7 @@ export function ThirdPartyApiCard() {
         id: editing?.id,
         name: formName.trim() || "fetch",
         base_url: baseUrl,
+        proxy: formProxy.trim(),
         ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
       });
       const result = data.result;
@@ -257,6 +261,7 @@ export function ThirdPartyApiCard() {
         ...(editing ? { id: editing.id } : {}),
         name,
         base_url: baseUrl,
+        proxy: formProxy.trim(),
         ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
         models: [...selectedModels].sort(),
         image_tiers: imageTiers,
@@ -285,6 +290,7 @@ export function ThirdPartyApiCard() {
         id: editing?.id,
         name: formName.trim() || "test",
         base_url: baseUrl,
+        proxy: formProxy.trim(),
         ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
       });
       if (data.result.ok) {
@@ -367,6 +373,9 @@ export function ThirdPartyApiCard() {
                         ) : null}
                       </div>
                       <div className="break-all font-mono text-xs text-stone-500">{item.base_url}</div>
+                      {item.proxy ? (
+                        <div className="break-all font-mono text-xs text-stone-400">代理：{item.proxy}</div>
+                      ) : null}
                       <div className="text-xs text-stone-500">
                         模型（{item.models.length}）：{item.models.length > 0 ? item.models.slice(0, 8).join("、") : "（未配置，仅默认兜底）"}
                         {item.models.length > 8 ? ` 等 ${item.models.length} 个` : ""}
@@ -420,6 +429,11 @@ export function ThirdPartyApiCard() {
             <div className="space-y-1.5">
               <label className="text-sm text-stone-700">API 地址（Base URL）</label>
               <Input value={formBaseUrl} onChange={(event) => setFormBaseUrl(event.target.value)} placeholder="https://api.example.com/v1" className="h-10 rounded-xl border-stone-200 bg-white" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm text-stone-700">代理地址（可选）</label>
+              <Input value={formProxy} onChange={(event) => setFormProxy(event.target.value)} placeholder="http://127.0.0.1:7890 或 socks5://user:pass@host:1080，留空直连" className="h-10 rounded-xl border-stone-200 bg-white" />
+              <p className="text-[11px] leading-5 text-stone-400">该 API 的所有请求（含获取模型/测试连接）都会走此代理，用于绕过上游对服务器 IP 的封锁。</p>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm text-stone-700">API Key</label>
