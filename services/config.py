@@ -348,6 +348,76 @@ def _normalize_model_quota_weights(value: object) -> dict[str, object]:
 
 IMAGE_TIERS = ("1k", "2k", "4k")
 
+# 档位 → 常见尺寸（最大边），用于从 size 推断分辨率档位
+_TIER_MAX_SIDES: dict[str, set[int]] = {
+    "1k": {1024, 1088, 1365, 1536, 1920},
+    "2k": {1440, 2048, 2560},
+    "4k": {2160, 3840},
+}
+
+
+def tier_for_size(size: object) -> str:
+    """根据尺寸字符串（如 2560x1440）推断分辨率档位，无法识别时默认 1k。"""
+    import re
+
+    match = re.match(r"^\s*(\d+)\s*[xX×]\s*(\d+)\s*$", str(size or "").strip())
+    if not match:
+        return "1k"
+    max_side = max(int(match.group(1)), int(match.group(2)))
+    for tier in IMAGE_TIERS:
+        if max_side in _TIER_MAX_SIDES[tier]:
+            return tier
+    if max_side <= 1600:
+        return "1k"
+    if max_side <= 2600:
+        return "2k"
+    return "4k"
+
+
+def image_price_weight(third_party_item: object, model: str, tier: str) -> int | None:
+    """第三方 API 模型按分辨率档位配置的单张额度权重；未配置返回 None。
+
+    权重 = 每生成 1 张图消耗的额度数。未配置某档位时调用方应回退到模型基础权重。
+    """
+    if not isinstance(third_party_item, dict):
+        return None
+    prices = third_party_item.get("image_prices")
+    if not isinstance(prices, dict):
+        return None
+    model_prices = prices.get(str(model or "").strip())
+    if not isinstance(model_prices, dict):
+        return None
+    raw = model_prices.get(str(tier or "").strip())
+    try:
+        weight = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if weight < 1:
+        return None
+    return weight
+
+
+def _normalize_image_prices(value: object) -> dict[str, dict[str, int]]:
+    """规范化第三方 API 模型分辨率定价（model → {档位: 每张额度权重}）。"""
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, dict[str, int]] = {}
+    for raw_model, raw_prices in value.items():
+        model = str(raw_model or "").strip()
+        if not model or not isinstance(raw_prices, dict):
+            continue
+        prices: dict[str, int] = {}
+        for tier in IMAGE_TIERS:
+            try:
+                weight = int(raw_prices.get(tier))
+            except (TypeError, ValueError):
+                continue
+            if weight >= 1:
+                prices[tier] = weight
+        if prices:
+            normalized[model] = prices
+    return normalized
+
 
 def _normalize_image_tiers(value: object) -> dict[str, list[str]]:
     """规范化第三方 API 的模型图片尺寸档位配置（model → [1k/2k/4k]）。"""
@@ -391,6 +461,7 @@ def _normalize_third_party_api_item(value: object) -> dict[str, object] | None:
         "proxy": str(value.get("proxy") or "").strip(),
         "models": models,
         "image_tiers": _normalize_image_tiers(value.get("image_tiers")),
+        "image_prices": _normalize_image_prices(value.get("image_prices")),
         "enabled": _normalize_bool(value.get("enabled"), True),
         "default": _normalize_bool(value.get("default"), False),
         "created_at": str(value.get("created_at") or "").strip(),
@@ -924,6 +995,7 @@ class ConfigStore:
                 "proxy": item.get("proxy") or "",
                 "models": item.get("models"),
                 "image_tiers": item.get("image_tiers") or {},
+                "image_prices": item.get("image_prices") or {},
                 "enabled": item.get("enabled"),
                 "default": item.get("default"),
                 "created_at": item.get("created_at"),

@@ -72,6 +72,7 @@ def _payload_from_fields(fields: dict[str, Any]) -> dict[str, Any]:
         "model": _clean(fields.get("model"), "gpt-image-2"),
         "n": _parse_count(fields.get("n")),
         "size": _clean(fields.get("size")) or None,
+        "tier": _clean(fields.get("tier")) or None,
         "quality": _clean(fields.get("quality"), "auto"),
         "response_format": _clean(fields.get("response_format"), "b64_json"),
         "stream": _parse_bool(fields.get("stream")),

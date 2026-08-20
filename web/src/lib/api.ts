@@ -424,6 +424,7 @@ export type ThirdPartyApi = {
   proxy?: string;
   models: string[];
   image_tiers?: Record<string, string[]>;
+  image_prices?: Record<string, Record<string, number>>;
   enabled: boolean;
   default: boolean;
   created_at: string;
@@ -679,6 +680,7 @@ export async function upsertThirdPartyApi(body: {
   proxy?: string;
   models?: string[];
   image_tiers?: Record<string, string[]>;
+  image_prices?: Record<string, Record<string, number>>;
   enabled?: boolean;
   default?: boolean;
 }) {
@@ -1022,7 +1024,14 @@ export async function editImage(files: File | File[], prompt: string, model?: Im
   );
 }
 
-export async function createImageGenerationTask(clientTaskId: string, prompt: string, model?: ImageModel, size?: string, quality = "auto") {
+export async function createImageGenerationTask(
+  clientTaskId: string,
+  prompt: string,
+  model?: ImageModel,
+  size?: string,
+  quality = "auto",
+  tier?: string,
+) {
   return httpRequest<ImageTask>("/api/image-tasks/generations", {
     method: "POST",
     body: {
@@ -1031,6 +1040,7 @@ export async function createImageGenerationTask(clientTaskId: string, prompt: st
       ...(model ? { model } : {}),
       ...(size ? { size } : {}),
       quality,
+      ...(tier ? { tier } : {}),
     },
   });
 }
@@ -1042,6 +1052,7 @@ export async function createImageEditTask(
   model?: ImageModel,
   size?: string,
   quality = "auto",
+  tier?: string,
 ) {
   const formData = new FormData();
   const uploadFiles = Array.isArray(files) ? files : [files];
@@ -1058,6 +1069,9 @@ export async function createImageEditTask(
     formData.append("size", size);
   }
   formData.append("quality", quality);
+  if (tier) {
+    formData.append("tier", tier);
+  }
 
   return httpRequest<ImageTask>("/api/image-tasks/edits", {
     method: "POST",

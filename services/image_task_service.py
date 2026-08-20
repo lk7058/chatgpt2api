@@ -44,6 +44,23 @@ def _clean(value: object, default: str = "") -> str:
     return str(value or default).strip()
 
 
+def _estimate_quota_used(task: dict[str, Any]) -> int:
+    """按模型+分辨率档位估算任务消耗积分（历史任务无 quota_used 时展示/退还用）。"""
+    try:
+        from services.config import config, image_price_weight, tier_for_size
+        from services.third_party_api import route_for_model as _route
+
+        model = _clean(task.get("model"))
+        tier = tier_for_size(_clean(task.get("size")))
+        third_party = _route(model)
+        base = image_price_weight(third_party, model, tier)
+        if base is None:
+            base = config.get_model_quota_weight(model)
+        return max(1, base) * max(1, len(task.get("data") or []))
+    except Exception:
+        return 0
+
+
 def _owner_id(identity: dict[str, object]) -> str:
     return _clean(identity.get("id")) or "anonymous"
 
@@ -156,6 +173,7 @@ class ImageTaskService:
         model: str,
         size: str | None,
         quality: str = "auto",
+        tier: str | None = None,
         base_url: str = "",
     ) -> dict[str, Any]:
         payload = {
@@ -163,6 +181,7 @@ class ImageTaskService:
             "model": model,
             "n": 1,
             "size": size,
+            "tier": tier,
             "quality": quality,
             "response_format": "b64_json" if config.image_prefer_b64_json else "url",
             "base_url": base_url,
@@ -178,6 +197,7 @@ class ImageTaskService:
         model: str,
         size: str | None,
         quality: str = "auto",
+        tier: str | None = None,
         base_url: str = "",
         images: list[tuple[bytes, str, str]] | None = None,
         masks: list[tuple[bytes, str, str]] | None = None,
@@ -189,6 +209,7 @@ class ImageTaskService:
             "model": model,
             "n": 1,
             "size": size,
+            "tier": tier,
             "quality": quality,
             "response_format": "b64_json" if config.image_prefer_b64_json else "url",
             "base_url": base_url,
@@ -260,10 +281,7 @@ class ImageTaskService:
                 quota_used = task.get("quota_used")
                 if quota_used is None:
                     if task.get("status") == TASK_STATUS_SUCCESS:
-                        try:
-                            quota_used = config.get_model_quota_weight(str(task.get("model") or "")) * max(1, len(task.get("data") or []))
-                        except Exception:
-                            quota_used = 0
+                        quota_used = _estimate_quota_used(task)
                     else:
                         quota_used = 0
                 item["quota_used"] = int(quota_used or 0)
@@ -301,10 +319,7 @@ class ImageTaskService:
             quota_used = int(target.get("quota_used") or 0)
             if quota_used <= 0:
                 # 历史任务无扣费记录时按模型权重估算
-                try:
-                    quota_used = config.get_model_quota_weight(str(target.get("model") or "")) * max(1, len(target.get("data") or []))
-                except Exception:
-                    quota_used = 0
+                quota_used = _estimate_quota_used(target)
             if quota_used <= 0:
                 raise ValueError("该任务未消耗积分，无需退还")
             owner_id = _clean(target.get("owner_id"))
@@ -531,10 +546,18 @@ class ImageTaskService:
             try:
                 user_id = identity.get("user_id")
                 if user_id and identity.get("role") != "admin":
-                    from services.config import config
+                    from services.config import config, image_price_weight, tier_for_size
+                    from services.third_party_api import route_for_model as _third_party_route
                     from services.user_service import user_service
 
-                    weight = config.get_model_quota_weight(model) * max(1, len(data))
+                    # 第三方 API 模型按分辨率档位定价；未配置档位价时回退模型基础权重
+                    explicit_tier = _clean(payload.get("tier"))
+                    tier = explicit_tier if explicit_tier in ("1k", "2k", "4k") else tier_for_size(_clean(payload.get("size")))
+                    third_party = _third_party_route(model)
+                    base = image_price_weight(third_party, model, tier)
+                    if base is None:
+                        base = config.get_model_quota_weight(model)
+                    weight = max(1, base) * max(1, len(data))
                     user_service.deduct_quota(str(user_id), weight, source="image", note=model)
                     # 记录本次任务消耗的积分（供任务管理展示与退还）
                     self._update_task(key, quota_used=weight)

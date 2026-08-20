@@ -111,6 +111,51 @@ def require_quota(identity: dict[str, object], model: str, count: int = 1) -> in
     return weight
 
 
+def image_quota_weight(
+    identity: dict[str, object],
+    model: str,
+    count: int = 1,
+    size: str | None = None,
+    tier: str | None = None,
+) -> int:
+    """图片请求权重：第三方 API 模型按分辨率档位定价，未配置时回退模型基础权重。
+
+    tier 优先取请求显式传入的档位；否则按 size 推断（1k/2k/4k）。
+    """
+    user_id = identity.get("user_id")
+    role = identity.get("role")
+    if not user_id or role == "admin":
+        return 0
+    from services.config import IMAGE_TIERS, image_price_weight, tier_for_size
+
+    effective_tier = tier if tier in IMAGE_TIERS else tier_for_size(size)
+    third_party = third_party_route_for_model(model) or (
+        third_party_default_route() if model in {"", "auto"} else None
+    )
+    base = image_price_weight(third_party, model, effective_tier)
+    if base is None:
+        base = config.get_model_quota_weight(model)
+    return max(1, base) * max(1, count)
+
+
+def require_image_quota(
+    identity: dict[str, object],
+    model: str,
+    count: int = 1,
+    size: str | None = None,
+    tier: str | None = None,
+) -> int:
+    """图片请求预检：按模型+分辨率档位计算权重并校验额度，不足抛 429。"""
+    weight = image_quota_weight(identity, model, count, size=size, tier=tier)
+    if weight == 0:
+        return 0
+    user_id = str(identity.get("user_id") or "")
+    result = user_service.check_quota(user_id, weight)
+    if not result.get("ok"):
+        raise HTTPException(status_code=429, detail={"error": result.get("message") or "额度不足"})
+    return weight
+
+
 def deduct_quota(identity: dict[str, object], weight: int, source: str = "generate", note: str = "") -> None:
     if weight <= 0:
         return
@@ -166,7 +211,7 @@ def create_router() -> APIRouter:
         payload["base_url"] = resolve_image_base_url(request)
         call = LoggedCall(identity, "/v1/images/generations", body.model, "文生图", request_text=body.prompt)
         await filter_or_log(call, body.prompt)
-        weight = require_quota(identity, body.model, max(1, body.n))
+        weight = require_image_quota(identity, body.model, max(1, body.n), size=body.size)
 
         # 第三方 API 路由：模型匹配则转发到自定义 OpenAI 兼容图片端点
         third_party = third_party_route_for_model(body.model) or (
@@ -228,7 +273,7 @@ def create_router() -> APIRouter:
         if mask_sources:
             payload["mask"] = await read_image_sources(mask_sources)
         payload["base_url"] = resolve_image_base_url(request)
-        weight = require_quota(identity, model, max(1, int(payload.get("n") or 1)))
+        weight = require_image_quota(identity, model, max(1, int(payload.get("n") or 1)), size=payload.get("size"))
 
         # 第三方 API 路由：模型匹配则转发到自定义 OpenAI 兼容图片编辑端点
         third_party = third_party_route_for_model(model) or (

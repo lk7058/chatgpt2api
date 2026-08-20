@@ -45,6 +45,20 @@ function summarizeTiers(item: ThirdPartyApi): string[] {
   return IMAGE_TIER_OPTIONS.filter((tier) => supported.has(tier));
 }
 
+function summarizePrices(item: ThirdPartyApi): string[] {
+  const prices = item.image_prices || {};
+  const lines: string[] = [];
+  for (const [model, tiers] of Object.entries(prices)) {
+    const parts = IMAGE_TIER_OPTIONS.filter((tier) => tiers?.[tier] !== undefined).map(
+      (tier) => `${tier}×${tiers?.[tier]}`,
+    );
+    if (parts.length > 0) {
+      lines.push(`${model}：${parts.join(" ")}`);
+    }
+  }
+  return lines;
+}
+
 export function ThirdPartyApiCard() {
   const didLoadRef = useRef(false);
   const [items, setItems] = useState<ThirdPartyApi[]>([]);
@@ -63,6 +77,7 @@ export function ThirdPartyApiCard() {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModels, setSelectedModels] = useState<Set<string>>(() => new Set());
   const [formImageTiers, setFormImageTiers] = useState<Record<string, Set<string>>>({});
+  const [formImagePrices, setFormImagePrices] = useState<Record<string, Partial<Record<ImageTier, string>>>>({});
   const [modelQuery, setModelQuery] = useState("");
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
 
@@ -97,6 +112,7 @@ export function ThirdPartyApiCard() {
     setAvailableModels([]);
     setSelectedModels(new Set());
     setFormImageTiers({});
+    setFormImagePrices({});
     setModelQuery("");
     setIsDialogOpen(true);
   };
@@ -112,11 +128,23 @@ export function ThirdPartyApiCard() {
     setAvailableModels((item.models || []).slice());
     setSelectedModels(new Set(item.models || []));
     const tiers: Record<string, Set<string>> = {};
+    const prices: Record<string, Partial<Record<ImageTier, string>>> = {};
     for (const model of item.models || []) {
       const configured = item.image_tiers?.[model];
       tiers[model] = new Set(configured && configured.length > 0 ? configured : ["1k"]);
+      const configuredPrices = item.image_prices?.[model];
+      if (configuredPrices) {
+        const entry: Partial<Record<ImageTier, string>> = {};
+        for (const tier of IMAGE_TIER_OPTIONS) {
+          if (configuredPrices[tier] !== undefined) {
+            entry[tier] = String(configuredPrices[tier]);
+          }
+        }
+        prices[model] = entry;
+      }
     }
     setFormImageTiers(tiers);
+    setFormImagePrices(prices);
     setModelQuery("");
     setIsDialogOpen(true);
   };
@@ -211,6 +239,13 @@ export function ThirdPartyApiCard() {
     });
   };
 
+  const setModelPrice = (model: string, tier: ImageTier, value: string) => {
+    setFormImagePrices((current) => ({
+      ...current,
+      [model]: { ...(current[model] || {}), [tier]: value },
+    }));
+  };
+
   const toggleAllModels = (checked: boolean) => {
     setSelectedModels((current) => {
       const next = new Set(current);
@@ -257,6 +292,27 @@ export function ThirdPartyApiCard() {
           imageTiers[model] = IMAGE_TIER_OPTIONS.filter((tier) => tiers.has(tier));
         }
       }
+      const imagePrices: Record<string, Record<string, number>> = {};
+      for (const model of selectedModels) {
+        const prices = formImagePrices[model];
+        if (!prices) {
+          continue;
+        }
+        const cleaned: Record<string, number> = {};
+        for (const tier of IMAGE_TIER_OPTIONS) {
+          const raw = prices[tier];
+          if (raw === undefined || raw === "") {
+            continue;
+          }
+          const n = Math.floor(Number(raw));
+          if (Number.isFinite(n) && n >= 1) {
+            cleaned[tier] = n;
+          }
+        }
+        if (Object.keys(cleaned).length > 0) {
+          imagePrices[model] = cleaned;
+        }
+      }
       await upsertThirdPartyApi({
         ...(editing ? { id: editing.id } : {}),
         name,
@@ -265,6 +321,7 @@ export function ThirdPartyApiCard() {
         ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
         models: [...selectedModels].sort(),
         image_tiers: imageTiers,
+        image_prices: imagePrices,
         enabled: formEnabled,
         default: formDefault,
       });
@@ -385,6 +442,11 @@ export function ThirdPartyApiCard() {
                           画图档位：1k / {summarizeTiers(item).filter((tier) => tier !== "1k").join(" / ")}
                         </div>
                       ) : null}
+                      {summarizePrices(item).slice(0, 3).map((line) => (
+                        <div key={line} className="text-xs text-stone-500">
+                          定价：{line}
+                        </div>
+                      ))}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       <Button
@@ -418,7 +480,7 @@ export function ThirdPartyApiCard() {
           <DialogHeader className="gap-2">
             <DialogTitle>{editing ? "编辑第三方 API" : "添加第三方 API"}</DialogTitle>
             <DialogDescription className="text-sm leading-6">
-              填写自定义 OpenAI 兼容服务的地址与密钥，点击「获取模型」自动拉取模型列表，勾选需要使用的模型；画图模型可再配置支持的尺寸档位（1k/2k/4k）。
+              填写自定义 OpenAI 兼容服务的地址与密钥，点击「获取模型」自动拉取模型列表，勾选需要使用的模型；画图模型可配置尺寸档位（1k/2k/4k）与各档位每张额度定价。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -513,6 +575,19 @@ export function ThirdPartyApiCard() {
                                     </button>
                                   );
                                 })}
+                                <span className="ml-1 text-[10px] text-stone-400">每张额度</span>
+                                {IMAGE_TIER_OPTIONS.map((tier) => (
+                                  <input
+                                    key={tier}
+                                    type="number"
+                                    min="1"
+                                    value={formImagePrices[model]?.[tier] ?? ""}
+                                    placeholder={tier}
+                                    title={`${tier} 档每张消耗额度（不填则按该模型基础权重扣费）`}
+                                    className="h-6 w-14 rounded-full border border-stone-200 bg-white px-2 text-center text-[11px] text-stone-700 outline-none transition focus:border-stone-400"
+                                    onChange={(event) => setModelPrice(model, tier, event.target.value)}
+                                  />
+                                ))}
                               </div>
                             ) : null}
                           </div>
@@ -522,7 +597,7 @@ export function ThirdPartyApiCard() {
                   )}
                 </div>
                 <p className="text-[11px] leading-5 text-stone-400">
-                  画图模型（名称含 image）可在行内配置支持的尺寸档位：1k 为基础档，勾选 2k/4k 后，生图页才会允许选择对应宽高比。
+                  画图模型（名称含 image）可在行内配置支持的尺寸档位（1k 为基础档，勾选 2k/4k 后生图页才允许选择对应宽高比）与每张额度：1k/2k/4k 分别填写每张消耗的额度，不填则按该模型基础权重扣费。
                 </p>
               </div>
             ) : (

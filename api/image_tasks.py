@@ -18,6 +18,7 @@ class ImageGenerationTaskRequest(BaseModel):
     model: str = "gpt-image-2"
     size: str | None = None
     quality: str = "auto"
+    tier: str | None = None
 
 
 class ResumePollRequest(BaseModel):
@@ -65,9 +66,9 @@ def create_router() -> APIRouter:
         identity = require_identity(authorization)
         await filter_or_log(LoggedCall(identity, "/api/image-tasks/generations", body.model, "文生图任务", request_text=body.prompt), body.prompt)
         # 额度检查（不足直接拒绝提交）
-        from api.ai import require_quota
+        from api.ai import require_image_quota
 
-        require_quota(identity, body.model, 1)
+        require_image_quota(identity, body.model, 1, size=body.size, tier=body.tier)
         try:
             return await run_in_threadpool(
                 image_task_service.submit_generation,
@@ -77,6 +78,7 @@ def create_router() -> APIRouter:
                 model=body.model,
                 size=body.size,
                 quality=body.quality,
+                tier=body.tier,
                 base_url=resolve_image_base_url(request),
             )
         except ValueError as exc:
@@ -98,9 +100,9 @@ def create_router() -> APIRouter:
         images = await read_image_sources(image_sources)
         masks = await read_image_sources(mask_sources) if mask_sources else None
         # 额度检查（不足直接拒绝提交）
-        from api.ai import require_quota
+        from api.ai import require_image_quota
 
-        require_quota(identity, model, 1)
+        require_image_quota(identity, model, 1, size=payload.get("size"), tier=payload.get("tier"))
         try:
             return await run_in_threadpool(
                 image_task_service.submit_edit,
@@ -110,6 +112,7 @@ def create_router() -> APIRouter:
                 model=model,
                 size=payload["size"],
                 quality=payload["quality"],
+                tier=payload.get("tier"),
                 base_url=resolve_image_base_url(request),
                 images=images,
                 masks=masks,
