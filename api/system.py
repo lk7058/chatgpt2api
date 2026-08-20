@@ -79,6 +79,7 @@ class ThirdPartyApiUpsertRequest(BaseModel):
     base_url: str = ""
     api_key: str = ""
     models: list[str] = []
+    image_tiers: dict[str, list[str]] = {}
     enabled: bool = True
     default: bool = False
 
@@ -457,7 +458,7 @@ td{{padding:8px 12px;border-top:1px solid #2a2d3a;font-size:14px}}tr:hover td{{b
             raise HTTPException(status_code=400, detail={"error": "名称不能为空"})
         if not base_url:
             raise HTTPException(status_code=400, detail={"error": "API 地址不能为空"})
-        from services.config import _normalize_third_party_api_item
+        from services.config import _normalize_image_tiers, _normalize_third_party_api_item
         import uuid as _uuid
 
         items = config.third_party_apis
@@ -467,6 +468,7 @@ td{{padding:8px 12px;border-top:1px solid #2a2d3a;font-size:14px}}tr:hover td{{b
             "base_url": base_url,
             "api_key": body.api_key.strip(),
             "models": [str(item).strip() for item in body.models if str(item).strip()],
+            "image_tiers": _normalize_image_tiers(body.image_tiers),
             "enabled": body.enabled,
             "default": body.default,
         }

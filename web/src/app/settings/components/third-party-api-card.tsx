@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 import {
   deleteThirdPartyApi,
   fetchThirdPartyApis,
@@ -25,6 +26,24 @@ import {
   upsertThirdPartyApi,
   type ThirdPartyApi,
 } from "@/lib/api";
+
+const IMAGE_TIER_OPTIONS = ["1k", "2k", "4k"] as const;
+type ImageTier = (typeof IMAGE_TIER_OPTIONS)[number];
+
+function isImageModel(model: string) {
+  return model.toLowerCase().includes("image");
+}
+
+function summarizeTiers(item: ThirdPartyApi): string[] {
+  const tiers = item.image_tiers || {};
+  const supported = new Set<string>();
+  for (const list of Object.values(tiers)) {
+    for (const tier of list || []) {
+      supported.add(tier);
+    }
+  }
+  return IMAGE_TIER_OPTIONS.filter((tier) => supported.has(tier));
+}
 
 export function ThirdPartyApiCard() {
   const didLoadRef = useRef(false);
@@ -42,6 +61,7 @@ export function ThirdPartyApiCard() {
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [selectedModels, setSelectedModels] = useState<Set<string>>(() => new Set());
+  const [formImageTiers, setFormImageTiers] = useState<Record<string, Set<string>>>({});
   const [modelQuery, setModelQuery] = useState("");
   const [pendingIds, setPendingIds] = useState<Set<string>>(() => new Set());
 
@@ -74,6 +94,7 @@ export function ThirdPartyApiCard() {
     setFormDefault(false);
     setAvailableModels([]);
     setSelectedModels(new Set());
+    setFormImageTiers({});
     setModelQuery("");
     setIsDialogOpen(true);
   };
@@ -87,6 +108,12 @@ export function ThirdPartyApiCard() {
     setFormDefault(item.default);
     setAvailableModels((item.models || []).slice());
     setSelectedModels(new Set(item.models || []));
+    const tiers: Record<string, Set<string>> = {};
+    for (const model of item.models || []) {
+      const configured = item.image_tiers?.[model];
+      tiers[model] = new Set(configured && configured.length > 0 ? configured : ["1k"]);
+    }
+    setFormImageTiers(tiers);
     setModelQuery("");
     setIsDialogOpen(true);
   };
@@ -130,6 +157,16 @@ export function ThirdPartyApiCard() {
       } else {
         setSelectedModels(new Set(models));
       }
+      // 新模型默认只支持 1k 档位，管理员可按需勾选 2k/4k
+      setFormImageTiers((current) => {
+        const next = { ...current };
+        for (const model of models) {
+          if (!next[model]) {
+            next[model] = new Set(["1k"]);
+          }
+        }
+        return next;
+      });
       toast.success(`获取到 ${models.length} 个模型，请勾选需要使用的模型`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "获取模型失败");
@@ -147,6 +184,26 @@ export function ThirdPartyApiCard() {
         next.delete(model);
       }
       return next;
+    });
+    if (checked) {
+      setFormImageTiers((current) => {
+        if (current[model]) {
+          return current;
+        }
+        return { ...current, [model]: new Set(["1k"]) };
+      });
+    }
+  };
+
+  const toggleTier = (model: string, tier: ImageTier, checked: boolean) => {
+    setFormImageTiers((current) => {
+      const next = new Set(current[model] || ["1k"]);
+      if (checked) {
+        next.add(tier);
+      } else if (tier !== "1k") {
+        next.delete(tier);
+      }
+      return { ...current, [model]: next };
     });
   };
 
@@ -189,12 +246,20 @@ export function ThirdPartyApiCard() {
     }
     setIsSaving(true);
     try {
+      const imageTiers: Record<string, string[]> = {};
+      for (const model of selectedModels) {
+        const tiers = formImageTiers[model];
+        if (tiers && tiers.size > 0) {
+          imageTiers[model] = IMAGE_TIER_OPTIONS.filter((tier) => tiers.has(tier));
+        }
+      }
       await upsertThirdPartyApi({
         ...(editing ? { id: editing.id } : {}),
         name,
         base_url: baseUrl,
         ...(formApiKey.trim() ? { api_key: formApiKey.trim() } : {}),
         models: [...selectedModels].sort(),
+        image_tiers: imageTiers,
         enabled: formEnabled,
         default: formDefault,
       });
@@ -306,6 +371,11 @@ export function ThirdPartyApiCard() {
                         模型（{item.models.length}）：{item.models.length > 0 ? item.models.slice(0, 8).join("、") : "（未配置，仅默认兜底）"}
                         {item.models.length > 8 ? ` 等 ${item.models.length} 个` : ""}
                       </div>
+                      {summarizeTiers(item).filter((tier) => tier !== "1k").length > 0 ? (
+                        <div className="text-xs text-stone-500">
+                          画图档位：1k / {summarizeTiers(item).filter((tier) => tier !== "1k").join(" / ")}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       <Button
@@ -339,7 +409,7 @@ export function ThirdPartyApiCard() {
           <DialogHeader className="gap-2">
             <DialogTitle>{editing ? "编辑第三方 API" : "添加第三方 API"}</DialogTitle>
             <DialogDescription className="text-sm leading-6">
-              填写自定义 OpenAI 兼容服务的地址与密钥，点击「获取模型」自动拉取模型列表，勾选需要使用的模型。
+              填写自定义 OpenAI 兼容服务的地址与密钥，点击「获取模型」自动拉取模型列表，勾选需要使用的模型；画图模型可再配置支持的尺寸档位（1k/2k/4k）。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -394,21 +464,52 @@ export function ThirdPartyApiCard() {
                     <div className="px-2 py-6 text-center text-xs text-stone-400">无匹配模型</div>
                   ) : (
                     <div className="grid gap-0.5 sm:grid-cols-2">
-                      {filteredModels.map((model) => (
-                        <label
-                          key={model}
-                          className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 transition hover:bg-stone-100"
-                        >
-                          <Checkbox
-                            checked={selectedModels.has(model)}
-                            onCheckedChange={(checked) => toggleModel(model, Boolean(checked))}
-                          />
-                          <span className="truncate font-mono text-xs">{model}</span>
-                        </label>
-                      ))}
+                      {filteredModels.map((model) => {
+                        const modelTiers = formImageTiers[model] || new Set(["1k"]);
+                        return (
+                          <div key={model} className="rounded-lg px-2 py-1.5 transition hover:bg-stone-100">
+                            <label className="flex cursor-pointer items-center gap-2 text-sm text-stone-700">
+                              <Checkbox
+                                checked={selectedModels.has(model)}
+                                onCheckedChange={(checked) => toggleModel(model, Boolean(checked))}
+                              />
+                              <span className="truncate font-mono text-xs">{model}</span>
+                            </label>
+                            {isImageModel(model) ? (
+                              <div className="mt-1 flex items-center gap-1 pl-6">
+                                {IMAGE_TIER_OPTIONS.map((tier) => {
+                                  const active = modelTiers.has(tier);
+                                  const isBase = tier === "1k";
+                                  return (
+                                    <button
+                                      key={tier}
+                                      type="button"
+                                      disabled={isBase}
+                                      title={isBase ? "1k 为基础档位，始终支持" : `画图尺寸 ${tier} 档`}
+                                      className={cn(
+                                        "h-6 min-w-9 cursor-pointer rounded-full border px-2 text-[11px] font-medium transition",
+                                        active
+                                          ? "border-stone-950 bg-stone-950 text-white"
+                                          : "border-stone-200 bg-white text-stone-500 hover:border-stone-400",
+                                        isBase && "cursor-default opacity-90",
+                                      )}
+                                      onClick={() => toggleTier(model, tier, !active)}
+                                    >
+                                      {tier}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
+                <p className="text-[11px] leading-5 text-stone-400">
+                  画图模型（名称含 image）可在行内配置支持的尺寸档位：1k 为基础档，勾选 2k/4k 后，生图页才会允许选择对应宽高比。
+                </p>
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-stone-200 px-4 py-6 text-center text-xs text-stone-400">

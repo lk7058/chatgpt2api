@@ -346,6 +346,30 @@ def _normalize_model_quota_weights(value: object) -> dict[str, object]:
     return normalized
 
 
+IMAGE_TIERS = ("1k", "2k", "4k")
+
+
+def _normalize_image_tiers(value: object) -> dict[str, list[str]]:
+    """规范化第三方 API 的模型图片尺寸档位配置（model → [1k/2k/4k]）。"""
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, list[str]] = {}
+    for raw_model, raw_tiers in value.items():
+        model = str(raw_model or "").strip()
+        if not model:
+            continue
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw_tier in raw_tiers or []:
+            tier = str(raw_tier or "").strip()
+            if tier in IMAGE_TIERS and tier not in seen:
+                seen.add(tier)
+                cleaned.append(tier)
+        if cleaned:
+            normalized[model] = cleaned
+    return normalized
+
+
 def _normalize_third_party_api_item(value: object) -> dict[str, object] | None:
     if not isinstance(value, dict):
         return None
@@ -365,6 +389,7 @@ def _normalize_third_party_api_item(value: object) -> dict[str, object] | None:
         "base_url": base_url,
         "api_key": api_key,
         "models": models,
+        "image_tiers": _normalize_image_tiers(value.get("image_tiers")),
         "enabled": _normalize_bool(value.get("enabled"), True),
         "default": _normalize_bool(value.get("default"), False),
         "created_at": str(value.get("created_at") or "").strip(),
@@ -896,6 +921,7 @@ class ConfigStore:
                 "base_url": item.get("base_url"),
                 "has_api_key": bool(api_key),
                 "models": item.get("models"),
+                "image_tiers": item.get("image_tiers") or {},
                 "enabled": item.get("enabled"),
                 "default": item.get("default"),
                 "created_at": item.get("created_at"),

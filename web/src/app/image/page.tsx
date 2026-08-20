@@ -155,10 +155,23 @@ function dataUrlToFile(dataUrl: string, fileName: string, mimeType?: string) {
   return new File([bytes], fileName, { type: mimeType || matchedMimeType || "image/png" });
 }
 
-function filterImageModels(items: Model[]): ImageModel[] {
-  return items
-    .map((item) => String(item.id || "").trim())
-    .filter((id, index, list) => id.toLowerCase().includes("image") && list.indexOf(id) === index);
+function filterImageModels(items: Model[]): { models: ImageModel[]; tiers: Record<string, string[]> } {
+  const models: ImageModel[] = [];
+  const tiers: Record<string, string[]> = {};
+  for (const item of items) {
+    const id = String(item.id || "").trim();
+    if (!id.toLowerCase().includes("image") || models.includes(id)) {
+      continue;
+    }
+    models.push(id);
+    const meta = (item as Model & { metadata?: { image_tiers?: unknown } }).metadata;
+    const metaTiers = Array.isArray(meta?.image_tiers) ? meta.image_tiers : [];
+    const validTiers = metaTiers.filter((tier): tier is string => tier === "1k" || tier === "2k" || tier === "4k");
+    if (validTiers.length > 0) {
+      tiers[id] = validTiers;
+    }
+  }
+  return { models, tiers };
 }
 
 function normalizeStoredImageModel(value: string | null, availableModels: ImageModel[]): ImageModel {
@@ -501,6 +514,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
   const [imageQuality, setImageQuality] = useState("auto");
   const [imageModel, setImageModel] = useState<ImageModel>("gpt-image-2");
   const [imageModels, setImageModels] = useState<ImageModel[]>(["gpt-image-2"]);
+  const [imageTiersByModel, setImageTiersByModel] = useState<Record<string, string[]>>({});
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [referenceImageFiles, setReferenceImageFiles] = useState<File[]>([]);
   const [referenceImages, setReferenceImages] = useState<StoredReferenceImage[]>([]);
@@ -828,11 +842,12 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
     let cancelled = false;
 
     const loadImageModels = async () => {
-      const applyModels = (available: string[]) => {
+      const applyModels = (available: string[], tiers: Record<string, string[]>) => {
         if (cancelled || available.length === 0) {
           return;
         }
         setImageModels(available);
+        setImageTiersByModel(tiers);
         const storedModel = typeof window !== "undefined" ? window.localStorage.getItem(IMAGE_MODEL_STORAGE_KEY) : null;
         setImageModel((current) => {
           if (available.includes(current)) {
@@ -845,10 +860,10 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       if (typeof window !== "undefined") {
         try {
           const cached = JSON.parse(window.localStorage.getItem(MODELS_CACHE_KEY) || "null") as
-            | { ts: number; models: string[] }
+            | { ts: number; models: string[]; tiers?: Record<string, string[]> }
             | null;
           if (cached && Array.isArray(cached.models) && Date.now() - cached.ts < MODELS_CACHE_TTL_MS) {
-            applyModels(cached.models);
+            applyModels(cached.models, cached.tiers || {});
             return;
           }
         } catch {
@@ -857,11 +872,11 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       }
       try {
         const data = await fetchModels();
-        const available = filterImageModels(Array.isArray(data.data) ? data.data : []);
-        applyModels(available);
+        const { models: available, tiers } = filterImageModels(Array.isArray(data.data) ? data.data : []);
+        applyModels(available, tiers);
         if (available.length > 0 && typeof window !== "undefined") {
           try {
-            window.localStorage.setItem(MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models: available }));
+            window.localStorage.setItem(MODELS_CACHE_KEY, JSON.stringify({ ts: Date.now(), models: available, tiers }));
           } catch {
             // 存储失败忽略
           }
@@ -869,6 +884,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
       } catch {
         if (!cancelled) {
           setImageModels(["gpt-image-2"]);
+          setImageTiersByModel({});
         }
       }
     };
@@ -2069,6 +2085,7 @@ function ImagePageContent({ isAdmin }: { isAdmin: boolean }) {
             imageQuality={imageQuality}
             imageModel={imageModel}
             imageModels={imageModels}
+            imageTiersByModel={imageTiersByModel}
             availableQuota={availableQuota}
             maxImageCount={maxImageCount}
             activeTaskCount={activeTaskCount}

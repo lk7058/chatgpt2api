@@ -26,6 +26,7 @@ from services.third_party_api import (
     default_route as third_party_default_route,
     image_edit as third_party_image_edit,
     image_generation as third_party_image_generation,
+    list_third_party_model_image_tiers,
     list_third_party_models,
     route_for_model as third_party_route_for_model,
 )
@@ -139,6 +140,7 @@ def create_router() -> APIRouter:
         data = result.get("data")
         if isinstance(data, list):
             seen = {str(item.get("id") or "").strip() for item in data if isinstance(item, dict)}
+            tiers_by_model = list_third_party_model_image_tiers()
             for model in list_third_party_models():
                 if model and model not in seen:
                     data.append({
@@ -149,6 +151,7 @@ def create_router() -> APIRouter:
                         "permission": [],
                         "root": model,
                         "parent": None,
+                        "metadata": {"image_tiers": tiers_by_model.get(model, ["1k"])},
                     })
         return result
 

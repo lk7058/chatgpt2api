@@ -57,6 +57,9 @@ export type Model = {
   permission: unknown[];
   root: string;
   parent: string | null;
+  metadata?: {
+    image_tiers?: string[];
+  };
 };
 
 type AccountListResponse = {
@@ -419,6 +422,7 @@ export type ThirdPartyApi = {
   base_url: string;
   has_api_key: boolean;
   models: string[];
+  image_tiers?: Record<string, string[]>;
   enabled: boolean;
   default: boolean;
   created_at: string;
@@ -672,6 +676,7 @@ export async function upsertThirdPartyApi(body: {
   base_url: string;
   api_key?: string;
   models?: string[];
+  image_tiers?: Record<string, string[]>;
   enabled?: boolean;
   default?: boolean;
 }) {

@@ -20,6 +20,7 @@ type ImageComposerProps = {
   imageQuality: string;
   imageModel: ImageModel;
   imageModels: ImageModel[];
+  imageTiersByModel: Record<string, string[]>;
   availableQuota: string;
   maxImageCount: number;
   activeTaskCount: number;
@@ -91,6 +92,7 @@ export function ImageComposer({
   imageQuality,
   imageModel,
   imageModels,
+  imageTiersByModel = {},
   availableQuota,
   maxImageCount,
   activeTaskCount,
@@ -130,6 +132,15 @@ export function ImageComposer({
   const ratioLabel = imageRatio === "auto" ? "auto" : `${imageRatio}(${imageTier})`;
   const imageSizeLabel = `${qualityLabel} · ${ratioLabel} · ${imageCount || 1} 张`;
   const selectedModelLabel = modelOptions.find((option) => option.value === imageModel)?.label || imageModel;
+  // 画图尺寸档位：优先取管理员在第三方 API 中为该模型配置的档位；
+  // 未配置时默认仅 1k，codex 系列模型默认支持 1k/2k/4k。
+  const allowedTiers = useMemo(() => {
+    const configured = imageTiersByModel[imageModel];
+    if (Array.isArray(configured) && configured.length > 0) {
+      return configured;
+    }
+    return imageModel.toLowerCase().includes("codex") ? ["1k", "2k", "4k"] : ["1k"];
+  }, [imageModel, imageTiersByModel]);
 
   useEffect(() => {
     if (!isSizeMenuOpen) {
@@ -457,15 +468,21 @@ export function ImageComposer({
                             {aspectOptions.map((option) => {
                               const active = option.ratio === imageRatio && option.tier === imageTier && option.width === imageWidth && option.height === imageHeight;
                               const Icon = option.icon;
+                              const disabled = option.tier !== "auto" && !allowedTiers.includes(option.tier);
                               return (
                                 <button
                                   key={`${option.ratio}-${option.tier}-${option.label}`}
                                   type="button"
+                                  disabled={disabled}
                                   className={cn(
                                     "flex h-[64px] cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border border-stone-200 bg-white text-sm text-stone-800 transition hover:border-stone-300 hover:bg-stone-50",
                                     active && "border-stone-950",
+                                    disabled && "cursor-not-allowed border-stone-100 bg-stone-50 text-stone-300 hover:border-stone-100 hover:bg-stone-50",
                                   )}
                                   onClick={() => {
+                                    if (disabled) {
+                                      return;
+                                    }
                                     onImageRatioChange(option.ratio);
                                     onImageTierChange(option.tier);
                                     onImageWidthChange(option.width);

@@ -59,6 +59,28 @@ def list_third_party_models() -> list[str]:
     return models
 
 
+def list_third_party_model_image_tiers() -> dict[str, list[str]]:
+    """收集第三方 API 配置的画图模型尺寸档位（多个 API 配置同一模型时取并集）。"""
+    from services.config import IMAGE_TIERS
+
+    merged: dict[str, set[str]] = {}
+    for item in config.third_party_apis:
+        if not item.get("enabled"):
+            continue
+        image_tiers = item.get("image_tiers")
+        if not isinstance(image_tiers, dict):
+            continue
+        for raw_model, raw_tiers in image_tiers.items():
+            model = str(raw_model or "").strip()
+            if not model:
+                continue
+            for raw_tier in raw_tiers or []:
+                tier = str(raw_tier or "").strip()
+                if tier in IMAGE_TIERS:
+                    merged.setdefault(model, set()).add(tier)
+    return {model: [tier for tier in IMAGE_TIERS if tier in merged[model]] for model in merged}
+
+
 def _endpoint(base_url: str, path: str = "/v1/chat/completions") -> str:
     base = str(base_url or "").strip().rstrip("/")
     if not base:
