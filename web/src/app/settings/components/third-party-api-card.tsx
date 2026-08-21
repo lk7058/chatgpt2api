@@ -480,7 +480,7 @@ export function ThirdPartyApiCard() {
           <DialogHeader className="gap-2">
             <DialogTitle>{editing ? "编辑第三方 API" : "添加第三方 API"}</DialogTitle>
             <DialogDescription className="text-sm leading-6">
-              填写自定义 OpenAI 兼容服务的地址与密钥，点击「获取模型」自动拉取模型列表，勾选需要使用的模型；画图模型可配置尺寸档位（1k/2k/4k）与各档位每张额度定价。
+              填写自定义 OpenAI 兼容服务的地址与密钥，点击「获取模型」自动拉取模型列表，勾选需要使用的模型；画图模型可配置画质档位（1k/2k/4k）与各档位倍率定价。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -554,6 +554,7 @@ export function ThirdPartyApiCard() {
                             {isImageModel(model) ? (
                               <>
                                 <div className="mt-1 flex flex-wrap items-center gap-1 pl-6">
+                                  <span className="shrink-0 text-[10px] text-stone-400">画质</span>
                                   {IMAGE_TIER_OPTIONS.map((tier) => {
                                     const active = modelTiers.has(tier);
                                     const isBase = tier === "1k";
@@ -578,7 +579,7 @@ export function ThirdPartyApiCard() {
                                   })}
                                 </div>
                                 <div className="mt-1 flex flex-wrap items-center gap-1 pl-6">
-                                  <span className="shrink-0 text-[10px] text-stone-400">额度</span>
+                                  <span className="shrink-0 text-[10px] text-stone-400">倍率</span>
                                   {IMAGE_TIER_OPTIONS.map((tier) => (
                                     <input
                                       key={tier}
@@ -586,7 +587,7 @@ export function ThirdPartyApiCard() {
                                       min="1"
                                       value={formImagePrices[model]?.[tier] ?? ""}
                                       placeholder={tier}
-                                      title={`${tier} 档每张消耗额度（不填则按该模型基础权重扣费）`}
+                                      title={`${tier} 档倍率（不填则按该模型基础权重扣费）`}
                                       className="h-6 w-12 rounded-full border border-stone-200 bg-white px-1 text-center text-[11px] text-stone-700 outline-none transition focus:border-stone-400"
                                       onChange={(event) => setModelPrice(model, tier, event.target.value)}
                                     />
@@ -601,7 +602,7 @@ export function ThirdPartyApiCard() {
                   )}
                 </div>
                 <p className="text-[11px] leading-5 text-stone-400">
-                  画图模型（名称含 image）可在行内配置支持的尺寸档位（1k 为基础档，勾选 2k/4k 后生图页才允许选择对应宽高比）与每张额度：1k/2k/4k 分别填写每张消耗的额度，不填则按该模型基础权重扣费。
+                  画图模型（名称含 image）可在行内配置画质档位（1k 为基础档，勾选 2k/4k 后生图页才允许选择对应宽高比）与倍率：1k/2k/4k 分别填写每张消耗的额度倍率，不填则按该模型基础权重扣费。
                 </p>
               </div>
             ) : (
