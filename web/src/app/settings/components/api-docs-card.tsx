@@ -302,7 +302,7 @@ export function ApiDocsCard() {
         </div>
 
         <div className="space-y-2">
-          <div className="text-xs font-medium text-stone-600">API 可用模型（由管理员配置），也可请求 /v1/models 获取全部模型</div>
+          <div className="text-xs font-medium text-stone-600">可API调用的模型</div>
           <div className="flex flex-wrap gap-2">
             {commonModels.map((model) => (
               <span key={model} className="rounded-md border border-stone-200 bg-white px-2 py-1 font-mono text-xs text-stone-700">{model}</span>
