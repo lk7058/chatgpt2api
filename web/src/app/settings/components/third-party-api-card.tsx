@@ -543,7 +543,7 @@ export function ThirdPartyApiCard() {
                       {filteredModels.map((model) => {
                         const modelTiers = formImageTiers[model] || new Set(["1k"]);
                         return (
-                          <div key={model} className="rounded-lg px-2 py-1.5 transition hover:bg-stone-100">
+                          <div key={model} className="min-w-0 rounded-lg px-2 py-1.5 transition hover:bg-stone-100">
                             <label className="flex cursor-pointer items-center gap-2 text-sm text-stone-700">
                               <Checkbox
                                 checked={selectedModels.has(model)}
@@ -552,43 +552,47 @@ export function ThirdPartyApiCard() {
                               <span className="truncate font-mono text-xs">{model}</span>
                             </label>
                             {isImageModel(model) ? (
-                              <div className="mt-1 flex items-center gap-1 pl-6">
-                                {IMAGE_TIER_OPTIONS.map((tier) => {
-                                  const active = modelTiers.has(tier);
-                                  const isBase = tier === "1k";
-                                  return (
-                                    <button
+                              <>
+                                <div className="mt-1 flex flex-wrap items-center gap-1 pl-6">
+                                  {IMAGE_TIER_OPTIONS.map((tier) => {
+                                    const active = modelTiers.has(tier);
+                                    const isBase = tier === "1k";
+                                    return (
+                                      <button
+                                        key={tier}
+                                        type="button"
+                                        disabled={isBase}
+                                        title={isBase ? "1k 为基础档位，始终支持" : `画图尺寸 ${tier} 档`}
+                                        className={cn(
+                                          "h-6 min-w-9 cursor-pointer rounded-full border px-2 text-[11px] font-medium transition",
+                                          active
+                                            ? "border-stone-950 bg-stone-950 text-white"
+                                            : "border-stone-200 bg-white text-stone-500 hover:border-stone-400",
+                                          isBase && "cursor-default opacity-90",
+                                        )}
+                                        onClick={() => toggleTier(model, tier, !active)}
+                                      >
+                                        {tier}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                <div className="mt-1 flex flex-wrap items-center gap-1 pl-6">
+                                  <span className="shrink-0 text-[10px] text-stone-400">额度</span>
+                                  {IMAGE_TIER_OPTIONS.map((tier) => (
+                                    <input
                                       key={tier}
-                                      type="button"
-                                      disabled={isBase}
-                                      title={isBase ? "1k 为基础档位，始终支持" : `画图尺寸 ${tier} 档`}
-                                      className={cn(
-                                        "h-6 min-w-9 cursor-pointer rounded-full border px-2 text-[11px] font-medium transition",
-                                        active
-                                          ? "border-stone-950 bg-stone-950 text-white"
-                                          : "border-stone-200 bg-white text-stone-500 hover:border-stone-400",
-                                        isBase && "cursor-default opacity-90",
-                                      )}
-                                      onClick={() => toggleTier(model, tier, !active)}
-                                    >
-                                      {tier}
-                                    </button>
-                                  );
-                                })}
-                                <span className="ml-1 text-[10px] text-stone-400">每张额度</span>
-                                {IMAGE_TIER_OPTIONS.map((tier) => (
-                                  <input
-                                    key={tier}
-                                    type="number"
-                                    min="1"
-                                    value={formImagePrices[model]?.[tier] ?? ""}
-                                    placeholder={tier}
-                                    title={`${tier} 档每张消耗额度（不填则按该模型基础权重扣费）`}
-                                    className="h-6 w-14 rounded-full border border-stone-200 bg-white px-2 text-center text-[11px] text-stone-700 outline-none transition focus:border-stone-400"
-                                    onChange={(event) => setModelPrice(model, tier, event.target.value)}
-                                  />
-                                ))}
-                              </div>
+                                      type="number"
+                                      min="1"
+                                      value={formImagePrices[model]?.[tier] ?? ""}
+                                      placeholder={tier}
+                                      title={`${tier} 档每张消耗额度（不填则按该模型基础权重扣费）`}
+                                      className="h-6 w-12 rounded-full border border-stone-200 bg-white px-1 text-center text-[11px] text-stone-700 outline-none transition focus:border-stone-400"
+                                      onChange={(event) => setModelPrice(model, tier, event.target.value)}
+                                    />
+                                  ))}
+                                </div>
+                              </>
                             ) : null}
                           </div>
                         );
