@@ -284,9 +284,7 @@ export function ApiKeysCard() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] leading-5 text-stone-400">
-                可选范围为管理员开放的 API 可用模型；绑定后该 Key 仅能调用此模型。
-              </p>
+              <p className="text-[11px] leading-5 text-stone-400">绑定后该 Key 仅能调用此模型。</p>
             </div>
           </div>
           <DialogFooter className="gap-2 pt-2">
