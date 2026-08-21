@@ -388,6 +388,9 @@ class LoggedCall:
             "duration_ms": int((time.time() - self.started) * 1000),
             "status": status,
         }
+        if self.identity.get("user_id"):
+            # API Key 调用时 key_id 是 Key 的 id，key_user_id 是绑定用户 id（用于日志按用户匹配）
+            detail["key_user_id"] = str(self.identity.get("user_id"))
         if self.client_ip:
             detail["ip"] = self.client_ip
         request_excerpt = _request_excerpt(self.request_text)

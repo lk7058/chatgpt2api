@@ -639,6 +639,9 @@ class ImageTaskService:
             "duration_ms": int((time.time() - started) * 1000),
             "status": status,
         }
+        if identity.get("user_id"):
+            # API Key 调用时 key_id 是 Key 的 id，key_user_id 是绑定用户 id（用于日志按用户匹配）
+            detail["key_user_id"] = str(identity.get("user_id"))
         if client_ip:
             detail["ip"] = client_ip
         if phases:

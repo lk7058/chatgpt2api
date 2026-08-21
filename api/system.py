@@ -175,14 +175,15 @@ def create_router(app_version: str) -> APIRouter:
             detail = item.get("detail")
             if not isinstance(detail, dict):
                 continue
-            key_id = str(detail.get("key_id") or "")
-            if not key_id or detail.get("email"):
+            # API Key 调用：key_id 是 Key 的 id，key_user_id 才是绑定用户 id
+            user_id = str(detail.get("key_user_id") or detail.get("key_id") or "")
+            if not user_id or detail.get("email"):
                 continue
-            if key_id not in email_cache:
-                user = user_service.get_user(key_id)
-                email_cache[key_id] = str(user.get("email") or "") if user else ""
-            if email_cache[key_id]:
-                detail["email"] = email_cache[key_id]
+            if user_id not in email_cache:
+                user = user_service.get_user(user_id)
+                email_cache[user_id] = str(user.get("email") or "") if user else ""
+            if email_cache[user_id]:
+                detail["email"] = email_cache[user_id]
         return {"items": items}
 
     @router.post("/api/logs/delete")

@@ -288,7 +288,16 @@ function LogsContent() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">{item.time}</TableCell>
                       <TableCell><Badge variant="secondary" className="rounded-md">{typeLabels[item.type] || item.type}</Badge></TableCell>
-                      {isCallLog ? <TableCell>{getDetailText(item, "key_name")}</TableCell> : null}
+                      {isCallLog ? (
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-stone-700">{getDetailText(item, "key_name") || "—"}</span>
+                            {getDetailText(item, "key_id") ? (
+                              <span className="font-mono text-[10px] text-stone-400">#{getDetailText(item, "key_id").slice(0, 6)}</span>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                      ) : null}
                       {isCallLog ? <TableCell className="max-w-[180px] truncate">{getDetailText(item, "email") || "—"}</TableCell> : null}
                       {isCallLog ? <TableCell className="whitespace-nowrap font-mono text-xs">{getDetailText(item, "ip") || "—"}</TableCell> : null}
                       {isCallLog ? <TableCell>{formatDuration(item)}</TableCell> : null}
