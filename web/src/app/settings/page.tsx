@@ -22,7 +22,6 @@ const RedeemCodesCard = dynamic(() => import("./components/redeem-codes-card").t
 const SMTPCard = dynamic(() => import("./components/smtp-card").then((m) => m.SMTPCard), { ssr: false, loading: cardLoading });
 const ProxyRuntimeCard = dynamic(() => import("./components/proxy-runtime-card").then((m) => m.ProxyRuntimeCard), { ssr: false, loading: cardLoading });
 const BackupSettingsCard = dynamic(() => import("./components/backup-settings-card").then((m) => m.BackupSettingsCard), { ssr: false, loading: cardLoading });
-const UserKeysCard = dynamic(() => import("./components/user-keys-card").then((m) => m.UserKeysCard), { ssr: false, loading: cardLoading });
 const ThirdPartyAppsCard = dynamic(() => import("./components/third-party-apps-card").then((m) => m.ThirdPartyAppsCard), { ssr: false, loading: cardLoading });
 const ApiDocsCard = dynamic(() => import("./components/api-docs-card").then((m) => m.ApiDocsCard), { ssr: false, loading: cardLoading });
 const ApiSettingsCard = dynamic(() => import("./components/api-settings-card").then((m) => m.ApiSettingsCard), { ssr: false, loading: cardLoading });
@@ -44,7 +43,6 @@ const settingsTabs = [
   { value: "redeem", title: "充值卡" },
   { value: "smtp", title: "邮箱设置" },
   { value: "backup", title: "备份" },
-  { value: "keys", title: "用户密钥" },
   { value: "api-docs", title: "接口接入" },
   { value: "proxy", title: "FlareSolverr" },
   { value: "cpa", title: "CPA" },
@@ -135,9 +133,6 @@ function SettingsPageContent() {
         </TabsContent>
         <TabsContent value="backup">
           <BackupSettingsCard />
-        </TabsContent>
-        <TabsContent value="keys">
-          <UserKeysCard />
         </TabsContent>
         <TabsContent value="api-docs">
           <ApiSettingsCard />

@@ -972,15 +972,6 @@ export async function clearGenerationRecords() {
   });
 }
 
-export type UserKey = {
-  id: string;
-  name: string;
-  role: "user";
-  enabled: boolean;
-  created_at: string | null;
-  last_used_at: string | null;
-};
-
 export async function login(authKey: string) {
   const normalizedAuthKey = String(authKey || "").trim();
   return httpRequest<LoginResponse>("/auth/login", {
@@ -1415,30 +1406,6 @@ export async function deleteSystemLogs(ids: string[]) {
   return httpRequest<{ removed: number }>("/api/logs/delete", {
     method: "POST",
     body: { ids },
-  });
-}
-
-export async function fetchUserKeys() {
-  return httpRequest<{ items: UserKey[] }>("/api/auth/users");
-}
-
-export async function createUserKey(name: string) {
-  return httpRequest<{ item: UserKey; key: string; items: UserKey[] }>("/api/auth/users", {
-    method: "POST",
-    body: { name },
-  });
-}
-
-export async function updateUserKey(keyId: string, updates: { enabled?: boolean; name?: string; key?: string }) {
-  return httpRequest<{ item: UserKey; items: UserKey[] }>(`/api/auth/users/${keyId}`, {
-    method: "POST",
-    body: updates,
-  });
-}
-
-export async function deleteUserKey(keyId: string) {
-  return httpRequest<{ items: UserKey[] }>(`/api/auth/users/${keyId}`, {
-    method: "DELETE",
   });
 }
 

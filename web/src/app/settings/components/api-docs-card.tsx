@@ -5,7 +5,6 @@ import { ChevronDown, FileArchive, FileText, KeyRound, ListChecks, type LucideIc
 
 import { Card, CardContent } from "@/components/ui/card";
 import webConfig from "@/constants/common-env";
-import { getStoredAuthSession } from "@/store/auth";
 
 type ParamRow = [string, string, string];
 
@@ -242,18 +241,13 @@ function ParamTable({ rows }: { rows: ParamRow[] }) {
   );
 }
 
-export function ApiDocsCard({ showAuthKey = true }: { showAuthKey?: boolean }) {
-  const [authKey, setAuthKey] = useState("");
+export function ApiDocsCard() {
   const [commonModels, setCommonModels] = useState<string[]>(DEFAULT_COMMON_MODELS);
   const serviceBaseUrl = webConfig.apiUrl.replace(/\/$/, "") || (typeof window !== "undefined" ? window.location.origin : "");
   const openAIBaseUrl = `${serviceBaseUrl}/v1`;
-  const displayKey = authKey || "<当前密钥>";
 
   useEffect(() => {
     let active = true;
-    void getStoredAuthSession().then((session) => {
-      if (active) setAuthKey(session?.key || "");
-    });
     // API 可用模型由管理员在后台配置
     import("@/lib/api").then(({ fetchPublicSettings }) =>
       fetchPublicSettings()
@@ -291,23 +285,14 @@ export function ApiDocsCard({ showAuthKey = true }: { showAuthKey?: boolean }) {
             <div className="text-xs text-stone-500">Base URL（OpenAI）</div>
             <div className="break-all font-mono text-xs text-stone-800">{openAIBaseUrl}</div>
           </div>
-          {showAuthKey ? (
-            <>
-              <div className="space-y-1 rounded-xl border border-stone-200 bg-white px-3 py-2">
-                <div className="text-xs text-stone-500">API Key</div>
-                <div className="break-all font-mono text-xs text-stone-800">{displayKey}</div>
-              </div>
-              <div className="space-y-1 rounded-xl border border-stone-200 bg-white px-3 py-2">
-                <div className="text-xs text-stone-500">请求头</div>
-                <div className="break-all font-mono text-xs text-stone-800">Authorization: Bearer {displayKey}</div>
-              </div>
-            </>
-          ) : (
-            <div className="space-y-1 rounded-xl border border-stone-200 bg-white px-3 py-2">
-              <div className="text-xs text-stone-500">鉴权方式</div>
-              <div className="break-all font-mono text-xs text-stone-800">Authorization: Bearer &lt;你的 API Key&gt;</div>
-            </div>
-          )}
+          <div className="space-y-1 rounded-xl border border-stone-200 bg-white px-3 py-2">
+            <div className="text-xs text-stone-500">鉴权方式</div>
+            <div className="break-all font-mono text-xs text-stone-800">Authorization: Bearer &lt;API Key&gt;</div>
+          </div>
+          <div className="space-y-1 rounded-xl border border-stone-200 bg-white px-3 py-2">
+            <div className="text-xs text-stone-500">获取 Key</div>
+            <div className="break-all font-mono text-xs text-stone-800">在「API Key 管理」中自行生成</div>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -348,7 +333,7 @@ export function ApiDocsCard({ showAuthKey = true }: { showAuthKey?: boolean }) {
                   </div>
                   <div className="space-y-2 lg:col-span-2">
                     <h3 className="text-xs font-semibold text-stone-700">调用示例</h3>
-                    <pre className="overflow-auto whitespace-pre-wrap break-all rounded-xl bg-stone-950 px-3 py-3 text-xs leading-5 text-stone-100">{item.example(openAIBaseUrl, displayKey)}</pre>
+                    <pre className="overflow-auto whitespace-pre-wrap break-all rounded-xl bg-stone-950 px-3 py-3 text-xs leading-5 text-stone-100">{item.example(openAIBaseUrl, "<API Key>")}</pre>
                   </div>
                 </div>
               </details>

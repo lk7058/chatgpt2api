@@ -654,7 +654,7 @@ export default function CenterPage() {
             </TabsContent>
             <TabsContent value="api" className="min-h-[440px] space-y-4">
               <ApiKeysCard />
-              <ApiDocsCard showAuthKey={false} />
+              <ApiDocsCard />
             </TabsContent>
             <TabsContent value="plaza" className="min-h-[440px] space-y-4">
               <ModelPlazaCard />
