@@ -46,7 +46,6 @@ const settingsTabs = [
   { value: "backup", title: "备份" },
   { value: "keys", title: "用户密钥" },
   { value: "api-docs", title: "接口接入" },
-  { value: "canvas", title: "画布入口" },
   { value: "proxy", title: "FlareSolverr" },
   { value: "cpa", title: "CPA" },
   { value: "sub2api", title: "Sub2API" },
@@ -117,6 +116,7 @@ function SettingsPageContent() {
         </div>
         <TabsContent value="basic">
           <ConfigCard />
+          <ThirdPartyAppsCard />
         </TabsContent>
         <TabsContent value="users">
           <UserManagementCard />
@@ -138,9 +138,6 @@ function SettingsPageContent() {
         </TabsContent>
         <TabsContent value="keys">
           <UserKeysCard />
-        </TabsContent>
-        <TabsContent value="canvas">
-          <ThirdPartyAppsCard />
         </TabsContent>
         <TabsContent value="api-docs">
           <ApiSettingsCard />
