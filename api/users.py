@@ -125,6 +125,7 @@ def create_router() -> APIRouter:
             "allowed_email_domains": config.allowed_email_domains,
             "turnstile_site_key": str(turnstile.get("site_key") or "") if turnstile.get("enabled") else "",
             "turnstile_enabled": bool(turnstile.get("enabled")),
+            "api_common_models": config.api_common_models,
         }
 
     @router.post("/auth/register")

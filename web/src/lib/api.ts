@@ -528,6 +528,7 @@ export type PublicSettings = {
   allowed_email_domains: string[];
   turnstile_site_key: string;
   turnstile_enabled: boolean;
+  api_common_models: string[];
 };
 
 export async function fetchPublicSettings() {
@@ -787,13 +788,13 @@ export async function fetchMyApiKeyCalls(keyId: string, limit = 50, offset = 0) 
 }
 
 export async function fetchApiAdminSettings() {
-  return httpRequest<{ enabled: boolean }>("/api/admin/api-settings");
+  return httpRequest<{ enabled: boolean; common_models: string[] }>("/api/admin/api-settings");
 }
 
-export async function putApiAdminSettings(enabled: boolean) {
-  return httpRequest<{ enabled: boolean }>("/api/admin/api-settings", {
+export async function putApiAdminSettings(body: { enabled?: boolean; common_models?: string[] }) {
+  return httpRequest<{ enabled: boolean; common_models: string[] }>("/api/admin/api-settings", {
     method: "PUT",
-    body: { enabled },
+    body,
   });
 }
 

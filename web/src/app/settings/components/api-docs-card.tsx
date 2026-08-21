@@ -215,7 +215,7 @@ const docs: ApiDoc[] = [
   },
 ];
 
-const usableModels = ["gpt-image-2", "codex-gpt-image-2", "auto", "gpt-5", "gpt-5-1", "gpt-5-2", "gpt-5-3", "gpt-5-3-mini", "gpt-5-mini"];
+const DEFAULT_COMMON_MODELS = ["gpt-image-2", "codex-gpt-image-2", "auto", "gpt-5", "gpt-5-1", "gpt-5-2", "gpt-5-3", "gpt-5-3-mini", "gpt-5-mini"];
 
 function ParamTable({ rows }: { rows: ParamRow[] }) {
   return (
@@ -244,6 +244,7 @@ function ParamTable({ rows }: { rows: ParamRow[] }) {
 
 export function ApiDocsCard() {
   const [authKey, setAuthKey] = useState("");
+  const [commonModels, setCommonModels] = useState<string[]>(DEFAULT_COMMON_MODELS);
   const serviceBaseUrl = webConfig.apiUrl.replace(/\/$/, "") || (typeof window !== "undefined" ? window.location.origin : "");
   const openAIBaseUrl = `${serviceBaseUrl}/v1`;
   const displayKey = authKey || "<当前密钥>";
@@ -253,6 +254,16 @@ export function ApiDocsCard() {
     void getStoredAuthSession().then((session) => {
       if (active) setAuthKey(session?.key || "");
     });
+    // 常用模型由管理员在后台配置
+    import("@/lib/api").then(({ fetchPublicSettings }) =>
+      fetchPublicSettings()
+        .then((data) => {
+          if (active && Array.isArray(data.api_common_models) && data.api_common_models.length > 0) {
+            setCommonModels(data.api_common_models);
+          }
+        })
+        .catch(() => undefined),
+    );
     return () => {
       active = false;
     };
@@ -293,7 +304,7 @@ export function ApiDocsCard() {
         <div className="space-y-2">
           <div className="text-xs font-medium text-stone-600">常用模型，也可请求 /v1/models 获取</div>
           <div className="flex flex-wrap gap-2">
-            {usableModels.map((model) => (
+            {commonModels.map((model) => (
               <span key={model} className="rounded-md border border-stone-200 bg-white px-2 py-1 font-mono text-xs text-stone-700">{model}</span>
             ))}
           </div>

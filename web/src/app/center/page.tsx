@@ -653,8 +653,8 @@ export default function CenterPage() {
               <McpAccessCard />
             </TabsContent>
             <TabsContent value="api" className="min-h-[440px] space-y-4">
-              <ApiDocsCard />
               <ApiKeysCard />
+              <ApiDocsCard />
             </TabsContent>
             <TabsContent value="plaza" className="min-h-[440px] space-y-4">
               <ModelPlazaCard />

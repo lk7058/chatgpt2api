@@ -419,6 +419,25 @@ def _normalize_image_prices(value: object) -> dict[str, dict[str, int]]:
     return normalized
 
 
+DEFAULT_API_COMMON_MODELS = [
+    "gpt-image-2", "codex-gpt-image-2", "auto",
+    "gpt-5", "gpt-5-1", "gpt-5-2", "gpt-5-3", "gpt-5-3-mini", "gpt-5-mini",
+]
+
+
+def _normalize_string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for raw in value:
+        item = str(raw or "").strip()
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
 def _normalize_image_tiers(value: object) -> dict[str, list[str]]:
     """规范化第三方 API 的模型图片尺寸档位配置（model → [1k/2k/4k]）。"""
     if not isinstance(value, dict):
@@ -1096,6 +1115,12 @@ class ConfigStore:
         """对外 API 服务全局开关（false 时所有 API Key 调用立即失效，站内前端不受影响）。"""
         return bool(self.data.get("api_enabled", True))
 
+    @property
+    def api_common_models(self) -> list[str]:
+        """接口文档展示的常用模型（管理员可配置；未配置时用默认列表）。"""
+        configured = _normalize_string_list(self.data.get("api_common_models"))
+        return configured or list(DEFAULT_API_COMMON_MODELS)
+
     def update(self, data: dict[str, object]) -> dict[str, object]:
         next_data = dict(self.data)
         next_data.update(dict(data or {}))
@@ -1124,6 +1149,8 @@ class ConfigStore:
             next_data["chat_completion_cache"] = _normalize_chat_completion_cache_settings(
                 next_data.get("chat_completion_cache")
             )
+        if "api_common_models" in next_data:
+            next_data["api_common_models"] = _normalize_string_list(next_data.get("api_common_models"))
         if "third_party_apps" in next_data:
             next_data["third_party_apps"] = _normalize_third_party_apps_settings(next_data.get("third_party_apps"))
         if "registration_enabled" in next_data:

@@ -23,7 +23,8 @@ class UpdateApiKeyRequest(BaseModel):
 
 
 class AdminApiSettingsRequest(BaseModel):
-    enabled: bool = True
+    enabled: bool | None = None
+    common_models: list[str] | None = None
 
 
 def create_router() -> APIRouter:
@@ -134,12 +135,26 @@ def create_router() -> APIRouter:
     @router.get("/api/admin/api-settings")
     async def get_admin_api_settings(authorization: str | None = Header(default=None)):
         require_admin(authorization)
-        return {"enabled": bool(config.api_enabled)}
+        return {
+            "enabled": bool(config.api_enabled),
+            "common_models": config.api_common_models,
+        }
 
     @router.put("/api/admin/api-settings")
     async def put_admin_api_settings(body: AdminApiSettingsRequest, authorization: str | None = Header(default=None)):
         require_admin(authorization)
-        config.update({"api_enabled": body.enabled})
-        return {"enabled": bool(config.api_enabled)}
+        updates: dict[str, object] = {}
+        if body.enabled is not None:
+            updates["api_enabled"] = body.enabled
+        if body.common_models is not None:
+            from services.config import _normalize_string_list
+
+            updates["api_common_models"] = _normalize_string_list(body.common_models)
+        if updates:
+            config.update(updates)
+        return {
+            "enabled": bool(config.api_enabled),
+            "common_models": config.api_common_models,
+        }
 
     return router
