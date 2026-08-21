@@ -136,6 +136,10 @@ class UserService:
             "mcp_key_created_at": self._clean(raw.get("mcp_key_created_at")),
             "mcp_call_count": int(raw.get("mcp_call_count", 0) or 0),
             "mcp_last_used_at": self._clean(raw.get("mcp_last_used_at")),
+            # 对外 API 服务字段（仅影响 API Key 调用）
+            "api_enabled": bool(raw.get("api_enabled", True)),
+            "api_concurrency": max(0, int(raw.get("api_concurrency", 0) or 0)),
+            "api_daily_limit": max(0, int(raw.get("api_daily_limit", 0) or 0)),
         }
 
     @staticmethod
@@ -164,6 +168,10 @@ class UserService:
             "mcp_key_created_at": user.get("mcp_key_created_at") or "",
             "mcp_call_count": int(user.get("mcp_call_count", 0) or 0),
             "mcp_last_used_at": user.get("mcp_last_used_at") or "",
+            # 对外 API 服务字段
+            "api_enabled": bool(user.get("api_enabled", True)),
+            "api_concurrency": int(user.get("api_concurrency", 0) or 0),
+            "api_daily_limit": int(user.get("api_daily_limit", 0) or 0),
         }
 
     # ── 查询 ────────────────────────────────────────────────
@@ -369,6 +377,28 @@ class UserService:
             if user is None:
                 return None
             user["enabled"] = bool(enabled)
+            user["updated_at"] = _now_iso()
+            self._save()
+            return self._public(user)
+
+    def set_api_settings(self, user_id: str, *, enabled: bool | None = None, concurrency: int | None = None, daily_limit: int | None = None) -> dict[str, Any] | None:
+        """管理员设置用户的对外 API 限制（enabled=开关，concurrency=并发上限，daily_limit=每日调用次数上限，0/None 表示不限）。"""
+        user_id = self._clean(user_id)
+        try:
+            concurrency = max(0, int(concurrency)) if concurrency is not None else None
+            daily_limit = max(0, int(daily_limit)) if daily_limit is not None else None
+        except (TypeError, ValueError):
+            raise ValueError("并发数与每日次数必须是整数")
+        with self._lock:
+            user = self._users.get(user_id)
+            if user is None:
+                return None
+            if enabled is not None:
+                user["api_enabled"] = bool(enabled)
+            if concurrency is not None:
+                user["api_concurrency"] = concurrency
+            if daily_limit is not None:
+                user["api_daily_limit"] = daily_limit
             user["updated_at"] = _now_iso()
             self._save()
             return self._public(user)

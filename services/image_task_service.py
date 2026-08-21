@@ -174,6 +174,7 @@ class ImageTaskService:
         size: str | None,
         quality: str = "auto",
         tier: str | None = None,
+        client_ip: str = "",
         base_url: str = "",
     ) -> dict[str, Any]:
         payload = {
@@ -185,6 +186,7 @@ class ImageTaskService:
             "quality": quality,
             "response_format": "b64_json" if config.image_prefer_b64_json else "url",
             "base_url": base_url,
+            "client_ip": client_ip,
         }
         return self._submit(identity, client_task_id=client_task_id, mode="generate", payload=payload)
 
@@ -198,6 +200,7 @@ class ImageTaskService:
         size: str | None,
         quality: str = "auto",
         tier: str | None = None,
+        client_ip: str = "",
         base_url: str = "",
         images: list[tuple[bytes, str, str]] | None = None,
         masks: list[tuple[bytes, str, str]] | None = None,
@@ -213,6 +216,7 @@ class ImageTaskService:
             "quality": quality,
             "response_format": "b64_json" if config.image_prefer_b64_json else "url",
             "base_url": base_url,
+            "client_ip": client_ip,
         }
         return self._submit(identity, client_task_id=client_task_id, mode="edit", payload=payload)
 
@@ -390,6 +394,7 @@ class ImageTaskService:
                 "model": _clean(payload.get("model"), "gpt-image-2"),
                 "size": _clean(payload.get("size")),
                 "quality": _clean(payload.get("quality"), "auto"),
+                "client_ip": _clean(payload.get("client_ip")),
                 "created_at": now,
                 "updated_at": now,
                 "created_ts": time.time(),
@@ -573,6 +578,7 @@ class ImageTaskService:
                 urls=_collect_image_urls(data),
                 account_email=account_email,
                 phases=phases,
+                client_ip=_clean(payload.get("client_ip")),
             )
         except Exception as exc:
             # 排队/执行期间任务已被取消：保持已取消状态，不覆盖为 error
@@ -601,6 +607,7 @@ class ImageTaskService:
                 error=log_error,
                 account_email=account_email,
                 phases=build_phases(time.time()),
+                client_ip=_clean(payload.get("client_ip")),
             )
 
     def _log_call(
@@ -617,6 +624,7 @@ class ImageTaskService:
         urls: list[str] | None = None,
         account_email: str = "",
         phases: list[dict[str, Any]] | None = None,
+        client_ip: str = "",
     ) -> None:
         endpoint = "/v1/images/edits" if mode == "edit" else "/v1/images/generations"
         summary_prefix = "图生图" if mode == "edit" else "文生图"
@@ -631,6 +639,8 @@ class ImageTaskService:
             "duration_ms": int((time.time() - started) * 1000),
             "status": status,
         }
+        if client_ip:
+            detail["ip"] = client_ip
         if phases:
             detail["phases"] = phases
         if request_preview:
@@ -850,6 +860,7 @@ class ImageTaskService:
                 task = self._tasks.get(key)
                 quality = _clean(task.get("quality"), "auto") if task else "auto"
                 size = _clean(task.get("size")) if task else None
+                client_ip = _clean(task.get("client_ip")) if task else ""
             data = format_image_result(
                 image_items,
                 "",  # prompt 已不重要，结果已经拿到了
@@ -866,6 +877,7 @@ class ImageTaskService:
                 "调用完成（续轮询）",
                 status="success",
                 urls=_collect_image_urls(data),
+                client_ip=client_ip,
             )
         except Exception as exc:
             error_message = str(exc) or "resume poll failed"
@@ -879,6 +891,7 @@ class ImageTaskService:
                 "调用失败（续轮询）",
                 status="failed",
                 error=error_message,
+                client_ip=client_ip,
             )
         finally:
             if backend is not None:

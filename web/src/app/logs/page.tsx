@@ -268,6 +268,7 @@ function LogsContent() {
                   <TableHead>类型</TableHead>
                   {isCallLog ? <TableHead>令牌名称</TableHead> : null}
                   {isCallLog ? <TableHead>用户邮箱</TableHead> : null}
+                  {isCallLog ? <TableHead>IP</TableHead> : null}
                   {isCallLog ? <TableHead>调用耗时</TableHead> : null}
                   {isCallLog ? <TableHead>状态</TableHead> : null}
                   {isCallLog ? <TableHead className="w-36">图片</TableHead> : null}
@@ -289,6 +290,7 @@ function LogsContent() {
                       <TableCell><Badge variant="secondary" className="rounded-md">{typeLabels[item.type] || item.type}</Badge></TableCell>
                       {isCallLog ? <TableCell>{getDetailText(item, "key_name")}</TableCell> : null}
                       {isCallLog ? <TableCell className="max-w-[180px] truncate">{getDetailText(item, "email") || "—"}</TableCell> : null}
+                      {isCallLog ? <TableCell className="whitespace-nowrap font-mono text-xs">{getDetailText(item, "ip") || "—"}</TableCell> : null}
                       {isCallLog ? <TableCell>{formatDuration(item)}</TableCell> : null}
                       {isCallLog ? (
                         <TableCell>

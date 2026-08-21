@@ -1091,6 +1091,11 @@ class ConfigStore:
         """MCP 服务全局开关（false 时所有用户 MCP 调用立即失效）。"""
         return bool(self.get_mcp_settings().get("enabled"))
 
+    @property
+    def api_enabled(self) -> bool:
+        """对外 API 服务全局开关（false 时所有 API Key 调用立即失效，站内前端不受影响）。"""
+        return bool(self.data.get("api_enabled", True))
+
     def update(self, data: dict[str, object]) -> dict[str, object]:
         next_data = dict(self.data)
         next_data.update(dict(data or {}))

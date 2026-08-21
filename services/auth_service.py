@@ -62,6 +62,7 @@ class AuthService:
             "role": role,
             "key_hash": key_hash,
             "user_id": user_id,
+            "model": self._clean(raw.get("model")),
             "enabled": bool(raw.get("enabled", True)),
             "created_at": created_at,
             "last_used_at": last_used_at,
@@ -92,6 +93,7 @@ class AuthService:
             "name": item.get("name"),
             "role": item.get("role"),
             "user_id": item.get("user_id") or None,
+            "model": item.get("model") or "",
             "enabled": bool(item.get("enabled", True)),
             "created_at": item.get("created_at"),
             "last_used_at": item.get("last_used_at"),
@@ -102,6 +104,31 @@ class AuthService:
             self._reload_locked()
             items = [item for item in self._items if role is None or item.get("role") == role]
             return [self._public_item(item) for item in items]
+
+    def list_keys_by_user(self, user_id: str) -> list[dict[str, object]]:
+        """列出某用户拥有的全部 API Key（不含明文与哈希）。"""
+        user_id = self._clean(user_id)
+        if not user_id:
+            return []
+        with self._lock:
+            self._reload_locked()
+            items = [item for item in self._items if self._clean(item.get("user_id")) == user_id]
+            return [self._public_item(item) for item in items]
+
+    def get_key(self, key_id: str, *, user_id: str = "") -> dict[str, object] | None:
+        """按 id 获取 Key；指定 user_id 时仅返回该用户自己的 Key。"""
+        normalized_id = self._clean(key_id)
+        if not normalized_id:
+            return None
+        with self._lock:
+            self._reload_locked()
+            for item in self._items:
+                if item.get("id") != normalized_id:
+                    continue
+                if user_id and self._clean(item.get("user_id")) != user_id:
+                    return None
+                return self._public_item(item)
+        return None
 
     def _has_key_hash_locked(self, key_hash: str, *, exclude_id: str = "") -> bool:
         for item in self._items:
@@ -158,7 +185,7 @@ class AuthService:
             raise ValueError("这个名称已经在使用中了，换一个更容易区分的名称吧")
         return candidate
 
-    def create_key(self, *, role: AuthRole, name: str = "", user_id: str = "") -> tuple[dict[str, object], str]:
+    def create_key(self, *, role: AuthRole, name: str = "", user_id: str = "", model: str = "") -> tuple[dict[str, object], str]:
         with self._lock:
             self._reload_locked()
             normalized_name = self._build_name_locked(name, role=role)
@@ -175,6 +202,7 @@ class AuthService:
                 "role": role,
                 "key_hash": key_hash,
                 "user_id": self._clean(user_id) or None,
+                "model": self._clean(model),
                 "enabled": True,
                 "created_at": _now_iso(),
                 "last_used_at": None,
@@ -230,6 +258,8 @@ class AuthService:
                     )
                 if "enabled" in updates and updates.get("enabled") is not None:
                     next_item["enabled"] = bool(updates.get("enabled"))
+                if "model" in updates:
+                    next_item["model"] = self._clean(updates.get("model"))
                 if "key" in updates and updates.get("key") is not None:
                     next_item["key_hash"] = self._build_key_hash_locked(str(updates.get("key") or ""), exclude_id=normalized_id)
                 self._items[index] = next_item

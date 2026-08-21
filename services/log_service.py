@@ -124,6 +124,44 @@ class LogService:
                 break
         return items
 
+    def list_by_key(self, key_id: str, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+        """按 API Key id 倒序返回调用日志（供 Key 所属用户查看）。"""
+        key_id = str(key_id or "").strip()
+        if not key_id or not self.path.exists():
+            return []
+        items: list[dict[str, Any]] = []
+        lines = self.path.read_text(encoding="utf-8").splitlines()
+        for line_number in range(len(lines) - 1, -1, -1):
+            item = self._parse_line(lines[line_number], line_number)
+            if item is None or item.get("type") != LOG_TYPE_CALL:
+                continue
+            detail = item.get("detail")
+            if not isinstance(detail, dict) or str(detail.get("key_id") or "") != key_id:
+                continue
+            if offset > 0:
+                offset -= 1
+                continue
+            items.append(item)
+            if len(items) >= limit:
+                break
+        return items
+
+    def count_by_key(self, key_id: str) -> int:
+        """统计某 API Key 的累计调用次数。"""
+        key_id = str(key_id or "").strip()
+        if not key_id or not self.path.exists():
+            return 0
+        count = 0
+        lines = self.path.read_text(encoding="utf-8").splitlines()
+        for line_number in range(len(lines) - 1, -1, -1):
+            item = self._parse_line(lines[line_number], line_number)
+            if item is None or item.get("type") != LOG_TYPE_CALL:
+                continue
+            detail = item.get("detail")
+            if isinstance(detail, dict) and str(detail.get("key_id") or "") == key_id:
+                count += 1
+        return count
+
     def delete(self, ids: list[str]) -> dict[str, int]:
         target_ids = {str(item or "").strip() for item in ids if str(item or "").strip()}
         if not self.path.exists() or not target_ids:
@@ -260,6 +298,7 @@ class LoggedCall:
     started: float = field(default_factory=time.time)
     request_text: str = ""
     request_shape: dict[str, int] | None = None
+    client_ip: str = ""
 
     async def run(self, handler, *args, sse: str = "openai"):
         from services.protocol.conversation import ImageGenerationError
@@ -349,6 +388,8 @@ class LoggedCall:
             "duration_ms": int((time.time() - self.started) * 1000),
             "status": status,
         }
+        if self.client_ip:
+            detail["ip"] = self.client_ip
         request_excerpt = _request_excerpt(self.request_text)
         if request_excerpt:
             detail["request_text"] = request_excerpt

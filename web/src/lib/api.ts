@@ -370,6 +370,13 @@ export type AuthUser = {
   total_checkins: number;
   last_login_at: string;
   last_login_ip: string;
+  mcp_enabled: boolean;
+  mcp_key_hint: string;
+  mcp_call_count: number;
+  mcp_last_used_at: string;
+  api_enabled: boolean;
+  api_concurrency: number;
+  api_daily_limit: number;
 };
 
 export type StreakBonus = {
@@ -713,6 +720,90 @@ export async function fetchThirdPartyModels(body: { id?: string; name: string; b
 export async function deleteThirdPartyApi(apiId: string) {
   return httpRequest<{ ok: boolean; items: ThirdPartyApi[] }>(`/api/third-party-apis/${encodeURIComponent(apiId)}`, {
     method: "DELETE",
+  });
+}
+
+// ── 对外 API Key 管理 ────────────────────────────────────────
+
+export type ApiKeyInfo = {
+  id: string;
+  name: string;
+  model: string;
+  enabled: boolean;
+  created_at: string;
+  last_used_at: string | null;
+  call_count: number;
+};
+
+export type ApiKeyCallRecord = {
+  time: string;
+  endpoint: string;
+  model: string;
+  status: string;
+  duration_ms?: number;
+  ip: string;
+  error: string;
+};
+
+export type ApiKeysInfo = {
+  global_enabled: boolean;
+  user_enabled: boolean;
+  api_concurrency: number;
+  api_daily_limit: number;
+};
+
+export async function fetchMyApiKeys() {
+  return httpRequest<{ items: ApiKeyInfo[] }>("/api/my/api-keys");
+}
+
+export async function fetchMyApiKeysInfo() {
+  return httpRequest<ApiKeysInfo>("/api/my/api-keys/info");
+}
+
+export async function createMyApiKey(body: { name?: string; model?: string }) {
+  return httpRequest<{ item: ApiKeyInfo; key: string }>("/api/my/api-keys", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function updateMyApiKey(keyId: string, body: { name?: string; model?: string; enabled?: boolean }) {
+  return httpRequest<{ item: ApiKeyInfo }>(`/api/my/api-keys/${encodeURIComponent(keyId)}`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+export async function deleteMyApiKey(keyId: string) {
+  return httpRequest<{ ok: boolean }>(`/api/my/api-keys/${encodeURIComponent(keyId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchMyApiKeyCalls(keyId: string, limit = 50, offset = 0) {
+  return httpRequest<{ items: ApiKeyCallRecord[]; total: number }>(
+    `/api/my/api-keys/${encodeURIComponent(keyId)}/calls?limit=${limit}&offset=${offset}`,
+  );
+}
+
+export async function fetchApiAdminSettings() {
+  return httpRequest<{ enabled: boolean }>("/api/admin/api-settings");
+}
+
+export async function putApiAdminSettings(enabled: boolean) {
+  return httpRequest<{ enabled: boolean }>("/api/admin/api-settings", {
+    method: "PUT",
+    body: { enabled },
+  });
+}
+
+export async function setUserApiSettings(
+  userId: string,
+  body: { enabled?: boolean; concurrency?: number; daily_limit?: number },
+) {
+  return httpRequest<{ item: AuthUser }>(`/api/users/${encodeURIComponent(userId)}/api-settings`, {
+    method: "POST",
+    body,
   });
 }
 

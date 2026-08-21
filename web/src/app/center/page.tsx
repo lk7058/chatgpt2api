@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthGuard } from "@/lib/use-auth-guard";
+import { ApiDocsCard } from "@/app/settings/components/api-docs-card";
+import { ApiKeysCard } from "./components/api-keys-card";
 import { McpAccessCard } from "./components/mcp-access-card";
 import { ModelPlazaCard } from "./components/model-plaza-card";
 import {
@@ -355,6 +357,7 @@ export default function CenterPage() {
             <TabsTrigger value="checkin" className="gap-1.5 px-4"><CalendarCheck className="size-4" />每日签到</TabsTrigger>
             <TabsTrigger value="quota" className="gap-1.5 px-4"><Coins className="size-4" />额度明细</TabsTrigger>
             <TabsTrigger value="security" className="gap-1.5 px-4"><ShieldCheck className="size-4" />安全设置</TabsTrigger>
+            <TabsTrigger value="api" className="gap-1.5 px-4"><KeyRound className="size-4" />API</TabsTrigger>
             <TabsTrigger value="mcp" className="gap-1.5 px-4"><Plug className="size-4" />MCP 接入</TabsTrigger>
             <TabsTrigger value="plaza" className="gap-1.5 px-4"><Store className="size-4" />模型广场</TabsTrigger>
           </TabsList>
@@ -648,6 +651,10 @@ export default function CenterPage() {
             </TabsContent>
             <TabsContent value="mcp" className="min-h-[440px] space-y-4">
               <McpAccessCard />
+            </TabsContent>
+            <TabsContent value="api" className="min-h-[440px] space-y-4">
+              <ApiDocsCard />
+              <ApiKeysCard />
             </TabsContent>
             <TabsContent value="plaza" className="min-h-[440px] space-y-4">
               <ModelPlazaCard />

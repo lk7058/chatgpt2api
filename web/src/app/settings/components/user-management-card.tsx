@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, CheckCircle2, Coins, FileText, LoaderCircle, Plus, Trash2, UserRound } from "lucide-react";
+import { Ban, CheckCircle2, Coins, FileText, KeyRound, LoaderCircle, Plus, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   addUserQuota,
   createUser,
@@ -24,6 +25,7 @@ import {
   fetchUsers,
   resetUserPassword,
   resetUserQuota,
+  setUserApiSettings,
   setUserEnabled,
   subtractUserQuota,
   type AuthUser,
@@ -85,6 +87,11 @@ export function UserManagementCard() {
   const [passwordValue, setPasswordValue] = useState("");
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [deletingUser, setDeletingUser] = useState<AuthUser | null>(null);
+  const [apiUser, setApiUser] = useState<AuthUser | null>(null);
+  const [apiEnabled, setApiEnabled] = useState(true);
+  const [apiConcurrency, setApiConcurrency] = useState("0");
+  const [apiDailyLimit, setApiDailyLimit] = useState("0");
+  const [isSavingApi, setIsSavingApi] = useState(false);
 
   const load = async (silent = false) => {
     if (!silent) {
@@ -235,6 +242,40 @@ export function UserManagementCard() {
     }
   };
 
+  const openApiSettings = (user: AuthUser) => {
+    setApiUser(user);
+    setApiEnabled(Boolean(user.api_enabled));
+    setApiConcurrency(String(user.api_concurrency || 0));
+    setApiDailyLimit(String(user.api_daily_limit || 0));
+  };
+
+  const handleSaveApiSettings = async () => {
+    if (!apiUser) {
+      return;
+    }
+    const concurrency = Math.floor(Number(apiConcurrency));
+    const dailyLimit = Math.floor(Number(apiDailyLimit));
+    if (!Number.isFinite(concurrency) || concurrency < 0 || !Number.isFinite(dailyLimit) || dailyLimit < 0) {
+      toast.error("并发数与每日次数请输入 ≥ 0 的整数（0 表示不限）");
+      return;
+    }
+    setIsSavingApi(true);
+    try {
+      const data = await setUserApiSettings(apiUser.id, {
+        enabled: apiEnabled,
+        concurrency,
+        daily_limit: dailyLimit,
+      });
+      setItems((current) => current.map((item) => (item.id === apiUser.id ? data.item : item)));
+      setApiUser(null);
+      toast.success("API 限制已保存");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "保存失败");
+    } finally {
+      setIsSavingApi(false);
+    }
+  };
+
   return (
     <>
       <Card className="rounded-2xl border-white/80 bg-white/90 shadow-sm">
@@ -261,7 +302,7 @@ export function UserManagementCard() {
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-stone-200">
-              <table className="w-full min-w-[1100px] text-left text-sm">
+              <table className="w-full min-w-[1300px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-stone-200 bg-stone-50 text-xs text-stone-500">
                     <th className="px-4 py-3 font-medium">邮箱</th>
@@ -271,6 +312,7 @@ export function UserManagementCard() {
                     <th className="px-4 py-3 font-medium">创建时间</th>
                     <th className="px-4 py-3 font-medium">登录时间</th>
                     <th className="px-4 py-3 font-medium">登录IP</th>
+                    <th className="px-4 py-3 font-medium">API 限制</th>
                     <th className="px-4 py-3 text-right font-medium">操作</th>
                   </tr>
                 </thead>
@@ -301,7 +343,31 @@ export function UserManagementCard() {
                       <td className="px-4 py-3 whitespace-nowrap text-stone-500">{formatDateTimeFull(user.last_login_at)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-stone-500">{user.last_login_ip || "—"}</td>
                       <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {user.api_enabled ? (
+                            <Badge className="bg-emerald-100 text-emerald-700">开</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="bg-rose-100 text-rose-700">关</Badge>
+                          )}
+                          {user.api_concurrency > 0 ? (
+                            <Badge variant="secondary" className="bg-stone-100 font-mono text-stone-600">并发 {user.api_concurrency}</Badge>
+                          ) : null}
+                          {user.api_daily_limit > 0 ? (
+                            <Badge variant="secondary" className="bg-stone-100 font-mono text-stone-600">日 {user.api_daily_limit}</Badge>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-8 rounded-lg px-2 text-xs text-stone-600"
+                            disabled={pendingIds.has(user.id)}
+                            onClick={() => openApiSettings(user)}
+                          >
+                            <KeyRound className="size-3.5" /> API限制
+                          </Button>
                           <Button
                             type="button"
                             variant="ghost"
@@ -392,7 +458,7 @@ export function UserManagementCard() {
                   ))}
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-stone-400">
+                      <td colSpan={9} className="px-4 py-8 text-center text-stone-400">
                         暂无用户，点击右上角「新建用户」创建
                       </td>
                     </tr>
@@ -492,6 +558,58 @@ export function UserManagementCard() {
             </Button>
             <Button type="button" className="rounded-xl bg-stone-950 text-white hover:bg-stone-800" onClick={() => void handleSavePassword()} disabled={isSavingPassword}>
               {isSavingPassword ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* API 限制 */}
+      <Dialog open={apiUser !== null} onOpenChange={(open) => { if (!open) setApiUser(null); }}>
+        <DialogContent className="max-w-md rounded-2xl p-6">
+          <DialogHeader className="gap-2">
+            <DialogTitle>API 限制设置</DialogTitle>
+            <DialogDescription className="text-sm leading-6">
+              为用户 <span className="font-medium text-stone-900">{apiUser?.email || apiUser?.username}</span>
+              设置对外 API（Key 调用）限制；0 表示不限。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <label className="flex items-center gap-2 text-sm text-stone-700">
+              <Checkbox checked={apiEnabled} onCheckedChange={(checked) => setApiEnabled(Boolean(checked))} />
+              允许该用户使用 API（关闭后其所有 Key 调用返回 403）
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm text-stone-700">并发上限</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={apiConcurrency}
+                  onChange={(event) => setApiConcurrency(event.target.value)}
+                  placeholder="0 = 不限"
+                  className="h-10 rounded-xl border-stone-200 bg-white"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm text-stone-700">每日调用次数上限</label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={apiDailyLimit}
+                  onChange={(event) => setApiDailyLimit(event.target.value)}
+                  placeholder="0 = 不限"
+                  className="h-10 rounded-xl border-stone-200 bg-white"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button type="button" variant="outline" className="rounded-xl border-stone-200 bg-white text-stone-700" onClick={() => setApiUser(null)}>
+              取消
+            </Button>
+            <Button type="button" className="rounded-xl bg-stone-950 px-5 text-white hover:bg-stone-800" onClick={() => void handleSaveApiSettings()} disabled={isSavingApi}>
+              {isSavingApi ? <LoaderCircle className="size-4 animate-spin" /> : null}
               保存
             </Button>
           </DialogFooter>

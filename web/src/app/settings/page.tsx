@@ -25,6 +25,7 @@ const BackupSettingsCard = dynamic(() => import("./components/backup-settings-ca
 const UserKeysCard = dynamic(() => import("./components/user-keys-card").then((m) => m.UserKeysCard), { ssr: false, loading: cardLoading });
 const ThirdPartyAppsCard = dynamic(() => import("./components/third-party-apps-card").then((m) => m.ThirdPartyAppsCard), { ssr: false, loading: cardLoading });
 const ApiDocsCard = dynamic(() => import("./components/api-docs-card").then((m) => m.ApiDocsCard), { ssr: false, loading: cardLoading });
+const ApiSettingsCard = dynamic(() => import("./components/api-settings-card").then((m) => m.ApiSettingsCard), { ssr: false, loading: cardLoading });
 const CPAPoolsCard = dynamic(() => import("./components/cpa-pools-card").then((m) => m.CPAPoolsCard), { ssr: false, loading: cardLoading });
 const Sub2APIConnections = dynamic(() => import("./components/sub2api-connections").then((m) => m.Sub2APIConnections), { ssr: false, loading: cardLoading });
 const ImageCleanupCard = dynamic(() => import("./components/image-cleanup-card").then((m) => m.ImageCleanupCard), { ssr: false, loading: cardLoading });
@@ -142,6 +143,7 @@ function SettingsPageContent() {
           <ThirdPartyAppsCard />
         </TabsContent>
         <TabsContent value="api-docs">
+          <ApiSettingsCard />
           <ApiDocsCard />
         </TabsContent>
         <TabsContent value="cpa">

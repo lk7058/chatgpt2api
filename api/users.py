@@ -107,6 +107,12 @@ class EnabledRequest(BaseModel):
     enabled: bool = True
 
 
+class UserApiSettingsRequest(BaseModel):
+    enabled: bool | None = None
+    concurrency: int | None = None
+    daily_limit: int | None = None
+
+
 def create_router() -> APIRouter:
     router = APIRouter()
 
@@ -592,6 +598,23 @@ def create_router() -> APIRouter:
             raise HTTPException(status_code=404, detail={"error": "用户不存在"})
         if not body.enabled:
             user_service.revoke_user_sessions(user_id)
+        return {"item": item}
+
+    @router.post("/api/users/{user_id}/api-settings")
+    async def set_user_api_settings(user_id: str, body: UserApiSettingsRequest, authorization: str | None = Header(default=None)):
+        """管理员设置用户的对外 API 限制：开关 / 并发上限 / 每日调用次数（0=不限）。"""
+        require_admin(authorization)
+        try:
+            item = user_service.set_api_settings(
+                user_id,
+                enabled=body.enabled,
+                concurrency=body.concurrency,
+                daily_limit=body.daily_limit,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail={"error": str(exc)}) from exc
+        if item is None:
+            raise HTTPException(status_code=404, detail={"error": "用户不存在"})
         return {"item": item}
 
     @router.delete("/api/users/{user_id}")
