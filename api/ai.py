@@ -198,6 +198,33 @@ def create_router() -> APIRouter:
                         "parent": None,
                         "metadata": {"image_tiers": tiers_by_model.get(model, ["1k"])},
                     })
+            # 附加计费元数据（rate=基础倍率，prices=画图各档位倍率，source=实际路由来源）
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                model = str(item.get("id") or "").strip()
+                if not model:
+                    continue
+                meta = dict(item.get("metadata") or {})
+                is_image = "image" in model.lower()
+                third_party = third_party_route_for_model(model) or (
+                    third_party_default_route() if model in {"", "auto"} else None
+                )
+                base = config.get_model_quota_weight(model)
+                meta["rate"] = base
+                meta["source"] = "third_party" if third_party is not None else "pool"
+                if is_image:
+                    if third_party is not None:
+                        tiers = meta.get("image_tiers") or tiers_by_model.get(model) or ["1k"]
+                        model_prices = (third_party.get("image_prices") or {}).get(model) or {}
+                    else:
+                        tiers = meta.get("image_tiers") or ["1k"]
+                        model_prices = {}
+                    meta["image_tiers"] = tiers
+                    meta["prices"] = {
+                        tier: max(1, int(model_prices.get(tier) or base)) for tier in tiers
+                    }
+                item["metadata"] = meta
         return result
 
     @router.post("/v1/images/generations")

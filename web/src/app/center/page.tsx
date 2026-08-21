@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarCheck, Coins, Gift, KeyRound, LoaderCircle, Mail, Plug, ShieldCheck, Ticket, UserRound } from "lucide-react";
+import { CalendarCheck, Coins, Gift, KeyRound, LoaderCircle, Mail, Plug, ShieldCheck, Store, Ticket, UserRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuthGuard } from "@/lib/use-auth-guard";
 import { McpAccessCard } from "./components/mcp-access-card";
+import { ModelPlazaCard } from "./components/model-plaza-card";
 import {
   bindEmail,
   changeMyPassword,
@@ -355,6 +356,7 @@ export default function CenterPage() {
             <TabsTrigger value="quota" className="gap-1.5 px-4"><Coins className="size-4" />额度明细</TabsTrigger>
             <TabsTrigger value="security" className="gap-1.5 px-4"><ShieldCheck className="size-4" />安全设置</TabsTrigger>
             <TabsTrigger value="mcp" className="gap-1.5 px-4"><Plug className="size-4" />MCP 接入</TabsTrigger>
+            <TabsTrigger value="plaza" className="gap-1.5 px-4"><Store className="size-4" />模型广场</TabsTrigger>
           </TabsList>
         </div>
 
@@ -646,6 +648,9 @@ export default function CenterPage() {
             </TabsContent>
             <TabsContent value="mcp" className="min-h-[440px] space-y-4">
               <McpAccessCard />
+            </TabsContent>
+            <TabsContent value="plaza" className="min-h-[440px] space-y-4">
+              <ModelPlazaCard />
             </TabsContent>
           </>
         )}

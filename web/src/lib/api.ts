@@ -59,6 +59,9 @@ export type Model = {
   parent: string | null;
   metadata?: {
     image_tiers?: string[];
+    rate?: number;
+    prices?: Record<string, number>;
+    source?: string;
   };
 };
 
