@@ -1116,9 +1116,9 @@ class ConfigStore:
         return bool(self.data.get("api_enabled", True))
 
     @property
-    def api_common_models(self) -> list[str]:
-        """接口文档展示的常用模型（管理员可配置；未配置时用默认列表）。"""
-        configured = _normalize_string_list(self.data.get("api_common_models"))
+    def api_available_models(self) -> list[str]:
+        """对 API 开放的模型列表（管理员配置；未配置时用默认列表）。"""
+        configured = _normalize_string_list(self.data.get("api_available_models"))
         return configured or list(DEFAULT_API_COMMON_MODELS)
 
     def update(self, data: dict[str, object]) -> dict[str, object]:
@@ -1149,8 +1149,8 @@ class ConfigStore:
             next_data["chat_completion_cache"] = _normalize_chat_completion_cache_settings(
                 next_data.get("chat_completion_cache")
             )
-        if "api_common_models" in next_data:
-            next_data["api_common_models"] = _normalize_string_list(next_data.get("api_common_models"))
+        if "api_available_models" in next_data:
+            next_data["api_available_models"] = _normalize_string_list(next_data.get("api_available_models"))
         if "third_party_apps" in next_data:
             next_data["third_party_apps"] = _normalize_third_party_apps_settings(next_data.get("third_party_apps"))
         if "registration_enabled" in next_data:

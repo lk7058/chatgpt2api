@@ -254,12 +254,12 @@ export function ApiDocsCard() {
     void getStoredAuthSession().then((session) => {
       if (active) setAuthKey(session?.key || "");
     });
-    // 常用模型由管理员在后台配置
+    // API 可用模型由管理员在后台配置
     import("@/lib/api").then(({ fetchPublicSettings }) =>
       fetchPublicSettings()
         .then((data) => {
-          if (active && Array.isArray(data.api_common_models) && data.api_common_models.length > 0) {
-            setCommonModels(data.api_common_models);
+          if (active && Array.isArray(data.api_available_models) && data.api_available_models.length > 0) {
+            setCommonModels(data.api_available_models);
           }
         })
         .catch(() => undefined),
@@ -302,7 +302,7 @@ export function ApiDocsCard() {
         </div>
 
         <div className="space-y-2">
-          <div className="text-xs font-medium text-stone-600">常用模型，也可请求 /v1/models 获取</div>
+          <div className="text-xs font-medium text-stone-600">API 可用模型（由管理员配置），也可请求 /v1/models 获取全部模型</div>
           <div className="flex flex-wrap gap-2">
             {commonModels.map((model) => (
               <span key={model} className="rounded-md border border-stone-200 bg-white px-2 py-1 font-mono text-xs text-stone-700">{model}</span>

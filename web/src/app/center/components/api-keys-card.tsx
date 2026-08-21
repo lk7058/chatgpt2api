@@ -16,13 +16,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   createMyApiKey,
   deleteMyApiKey,
-  fetchModels,
   fetchMyApiKeyCalls,
   fetchMyApiKeys,
   fetchMyApiKeysInfo,
+  fetchPublicSettings,
   updateMyApiKey,
   type ApiKeyCallRecord,
   type ApiKeyInfo,
@@ -51,7 +52,7 @@ export function ApiKeysCard() {
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
   const [info, setInfo] = useState<ApiKeysInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [modelSuggestions, setModelSuggestions] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
 
   // 创建
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -85,12 +86,12 @@ export function ApiKeysCard() {
     }
     didLoadRef.current = true;
     void loadAll();
-    void fetchModels()
+    // 绑定模型可选范围 = 管理员配置的 API 可用模型
+    void fetchPublicSettings()
       .then((data) => {
-        const ids = (Array.isArray(data.data) ? data.data : []).map((item) => String(item?.id || "")).filter(Boolean);
-        setModelSuggestions(Array.from(new Set(ids)).sort());
+        setAvailableModels(Array.isArray(data.api_available_models) ? data.api_available_models : []);
       })
-      .catch(() => setModelSuggestions([]));
+      .catch(() => setAvailableModels([]));
   }, []);
 
   const handleCreate = async () => {
@@ -270,18 +271,22 @@ export function ApiKeysCard() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm text-stone-700">绑定模型（可选）</label>
-              <Input
-                value={createModel}
-                onChange={(event) => setCreateModel(event.target.value)}
-                placeholder="留空不限模型，如 gpt-image-2-vip"
-                list="api-key-model-suggestions"
-                className="h-10 rounded-xl border-stone-200 bg-white font-mono text-xs"
-              />
-              <datalist id="api-key-model-suggestions">
-                {modelSuggestions.map((model) => (
-                  <option key={model} value={model} />
-                ))}
-              </datalist>
+              <Select value={createModel} onValueChange={setCreateModel}>
+                <SelectTrigger className="h-10 rounded-xl border-stone-200 bg-white text-sm shadow-none">
+                  <SelectValue placeholder="不限模型（可调用全部开放模型）" />
+                </SelectTrigger>
+                <SelectContent className="z-[120]">
+                  <SelectItem value="">不限模型</SelectItem>
+                  {availableModels.map((model) => (
+                    <SelectItem key={model} value={model} className="font-mono text-xs">
+                      {model}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] leading-5 text-stone-400">
+                可选范围为管理员开放的 API 可用模型；绑定后该 Key 仅能调用此模型。
+              </p>
             </div>
           </div>
           <DialogFooter className="gap-2 pt-2">
